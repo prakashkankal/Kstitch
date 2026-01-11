@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import DashboardSidebar from '../components/DashboardSidebar'
+import DashboardSidebar from '../../components/Tailor/DashboardSidebar'
 
 const TailorOrders = () => {
     const navigate = useNavigate();
@@ -99,14 +99,14 @@ const TailorOrders = () => {
 
     if (!tailorData) {
         return (
-            <div className="w-full min-h-screen flex items-center justify-center bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50">
+            <div className="w-full min-h-screen flex items-center justify-center bg-[#f5f5f0]">
                 <div className="text-slate-600 text-lg">Loading...</div>
             </div>
         );
     }
 
     return (
-        <div className="w-full min-h-screen flex bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50 text-slate-900">
+        <div className="w-full min-h-screen flex bg-[#f5f5f0] text-slate-900">
             {/* Sidebar with Profile Modal */}
             <DashboardSidebar
                 tailorData={tailorData}
@@ -123,19 +123,19 @@ const TailorOrders = () => {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">Total Orders</p>
                         <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
                     </div>
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">In Progress</p>
-                        <p className="text-3xl font-bold text-violet-600">{stats.inProgress}</p>
+                        <p className="text-3xl font-bold text-[#6b4423]">{stats.inProgress}</p>
                     </div>
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">Completed</p>
                         <p className="text-3xl font-bold text-emerald-600">{stats.completed}</p>
                     </div>
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">Pending</p>
                         <p className="text-3xl font-bold text-amber-600">{stats.pending}</p>
                     </div>
@@ -148,8 +148,8 @@ const TailorOrders = () => {
                             key={status}
                             onClick={() => setSelectedStatus(status)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedStatus === status
-                                    ? 'bg-violet-600 text-white shadow-lg'
-                                    : 'bg-white/60 text-slate-700 hover:bg-white/80'
+                                ? 'bg-[#6b4423] text-white shadow-lg'
+                                : 'bg-white text-slate-700 hover:bg-amber-50 border-2 border-dashed border-gray-300'
                                 }`}
                         >
                             {status}
@@ -158,7 +158,7 @@ const TailorOrders = () => {
                 </div>
 
                 {/* Orders Table */}
-                <div className="bg-white/60 rounded-2xl border border-white/50 overflow-hidden">
+                <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden">
                     <div className="p-6 border-b border-white/50">
                         <h2 className="text-xl font-bold text-slate-800">
                             {selectedStatus === 'All' ? 'All Orders' : `${selectedStatus} Orders`}
@@ -167,7 +167,7 @@ const TailorOrders = () => {
 
                     {loading ? (
                         <div className="p-12 text-center">
-                            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+                            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#6b4423]"></div>
                             <p className="mt-4 text-slate-600">Loading orders...</p>
                         </div>
                     ) : error ? (
@@ -209,10 +209,10 @@ const TailorOrders = () => {
                                             <td className="px-6 py-4 text-sm text-slate-700">{order.orderType}</td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
-                                                        order.status === 'In Progress' ? 'bg-violet-100 text-violet-700' :
-                                                            order.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
-                                                                order.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                                                    'bg-amber-100 text-amber-700'
+                                                    order.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
+                                                        order.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
+                                                            order.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                                                                'bg-amber-100 text-amber-700'
                                                     }`}>
                                                     {order.status}
                                                 </span>

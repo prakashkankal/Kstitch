@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import DashboardSidebar from '../components/DashboardSidebar'
+import DashboardSidebar from '../../components/Tailor/DashboardSidebar'
 
 const TailorCustomers = () => {
     const navigate = useNavigate();
@@ -103,14 +103,14 @@ const TailorCustomers = () => {
 
     if (!tailorData) {
         return (
-            <div className="w-full min-h-screen flex items-center justify-center bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50">
+            <div className="w-full min-h-screen flex items-center justify-center bg-[#f5f5f0]">
                 <div className="text-slate-600 text-lg">Loading...</div>
             </div>
         );
     }
 
     return (
-        <div className="w-full min-h-screen flex bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50 text-slate-900">
+        <div className="w-full min-h-screen flex bg-[#f5f5f0] text-slate-900">
             {/* Sidebar with Profile Modal */}
             <DashboardSidebar
                 tailorData={tailorData}
@@ -127,15 +127,15 @@ const TailorCustomers = () => {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">Total Customers</p>
                         <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
                     </div>
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">Active This Month</p>
-                        <p className="text-3xl font-bold text-violet-600">{stats.activeThisMonth}</p>
+                        <p className="text-3xl font-bold text-[#6b4423]">{stats.activeThisMonth}</p>
                     </div>
-                    <div className="bg-white/60 p-6 rounded-2xl border border-white/50">
+                    <div className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl">
                         <p className="text-slate-500 text-sm mb-1">New This Week</p>
                         <p className="text-3xl font-bold text-emerald-600">{stats.newThisWeek}</p>
                     </div>
@@ -144,7 +144,7 @@ const TailorCustomers = () => {
                 {/* Customers Grid */}
                 {loading ? (
                     <div className="p-12 text-center">
-                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#6b4423]"></div>
                         <p className="mt-4 text-slate-600">Loading customers...</p>
                     </div>
                 ) : error ? (
@@ -160,9 +160,9 @@ const TailorCustomers = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {customers.map((customer, index) => (
-                            <div key={index} className="bg-white/60 rounded-2xl border border-white/50 p-6 hover:shadow-lg transition-all">
+                            <div key={index} className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6 hover:shadow-lg transition-all">
                                 <div className="flex items-start gap-4">
-                                    <div className="w-12 h-12 bg-linear-to-br from-violet-600 to-fuchsia-600 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
+                                    <div className="w-12 h-12 bg-linear-to-br from-[#6b4423] to-[#8b5a3c] rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
                                         {getInitials(customer.name)}
                                     </div>
                                     <div className="flex-1">
@@ -177,7 +177,7 @@ const TailorCustomers = () => {
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500">Total Spent</p>
-                                                <p className="text-lg font-bold text-violet-600">{formatPrice(customer.totalSpent)}</p>
+                                                <p className="text-lg font-bold text-[#6b4423]">{formatPrice(customer.totalSpent)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500">Last Visit</p>

@@ -1,16 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import Homepage from './Pages/Homepage'
-import TailorRegistration from './Pages/TailorRegistration'
-import TailorDashboard from './Pages/TailorDashboard'
-import TailorOrders from './Pages/TailorOrders'
-import TailorCustomers from './Pages/TailorCustomers'
-import TailorPortfolio from './Pages/TailorPortfolio'
-import TailorSettings from './Pages/TailorSettings'
+import TailorRegistration from './Pages/Tailor/TailorRegistration'
+import TailorDashboard from './Pages/Tailor/TailorDashboard'
+import TailorOrders from './Pages/Tailor/TailorOrders'
+import TailorCustomers from './Pages/Tailor/TailorCustomers'
+import TailorPortfolio from './Pages/Tailor/TailorPortfolio'
+import TailorSettings from './Pages/Tailor/TailorSettings'
 import Login from './Pages/Login'
 import UserRegistration from './Pages/UserRegistration'
-import Profile from './Pages/Profile'
-import Navbar from './components/Navbar'
+import Profile from './Pages/Customer/Profile'
+import TailorDetailPage from './Pages/Tailor/TailorDetailPage'
+import Navbar from './components/Shared/Navbar'
 
 // Protected Route wrapper for tailor routes
 const ProtectedTailorRoute = ({ children }) => {
@@ -61,28 +62,14 @@ const App = () => {
 
         <Routes>
           <Route path="/" element={<HomePageWrapper />} />
-          <Route path="/register" element={
+          <Route path="/register" element={<TailorRegistration />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<UserRegistration />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/tailor/:id" element={
             <>
               <Navbar />
-              <TailorRegistration />
-            </>
-          } />
-          <Route path="/login" element={
-            <>
-              <Navbar />
-              <Login />
-            </>
-          } />
-          <Route path="/signup" element={
-            <>
-              <Navbar />
-              <UserRegistration />
-            </>
-          } />
-          <Route path="/profile" element={
-            <>
-              <Navbar />
-              <Profile />
+              <TailorDetailPage />
             </>
           } />
           <Route path="/dashboard" element={

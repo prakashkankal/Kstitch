@@ -168,9 +168,9 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white/90 backdrop-blur-2xl rounded-3xl border border-white/60 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white/95 backdrop-blur-xl rounded-3xl border-2 border-dashed border-gray-300 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
-                <div className="sticky top-0 bg-white/95 backdrop-blur-xl border-b border-white/60 p-6 flex justify-between items-center z-10">
+                <div className="sticky top-0 bg-[#f5f5f0] backdrop-blur-xl border-b-2 border-dashed border-gray-300 p-6 flex justify-between items-center z-10">
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800">My Profile</h2>
                         <p className="text-slate-500 text-sm">Manage your shop image and profile information</p>
@@ -186,7 +186,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                 {/* Content */}
                 <div className="p-6 space-y-6">
                     {/* Shop Image */}
-                    <div className="bg-white/60 rounded-2xl border border-white/50 p-6">
+                    <div className="bg-amber-50 border-2 border-dashed border-gray-300 rounded-2xl p-6">
                         <h3 className="text-xl font-bold text-slate-800 mb-6">Shop Image</h3>
                         <div className="flex flex-col md:flex-row gap-6">
                             <div className="shrink-0">
@@ -202,8 +202,8 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                             <div className="flex-1">
                                 <label className="text-sm font-medium text-slate-700 mb-2 block">Upload Shop Image</label>
                                 <div className="mb-4">
-                                    <label className="flex items-center justify-center w-full px-4 py-3 bg-white/60 border-2 border-dashed border-violet-300 rounded-xl hover:border-violet-500 hover:bg-violet-50 transition-all cursor-pointer">
-                                        <div className="flex items-center gap-2 text-violet-600">
+                                    <label className="flex items-center justify-center w-full px-4 py-3 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-[#6b4423] hover:bg-amber-50 transition-all cursor-pointer">
+                                        <div className="flex items-center gap-2 text-[#6b4423]">
                                             <span className="font-medium">Choose Image</span>
                                         </div>
                                         <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
@@ -215,7 +215,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     <button
                                         onClick={handleImageUpload}
                                         disabled={uploading || !imagePreview}
-                                        className="flex-1 px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1 px-6 py-3 bg-[#6b4423] text-white rounded-xl font-medium hover:bg-[#573619] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {uploading ? 'Uploading...' : 'Save Image'}
                                     </button>
@@ -240,7 +240,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                     </div>
 
                     {/* Shop Profile */}
-                    <div className="bg-white/60 rounded-2xl border border-white/50 p-6">
+                    <div className="bg-amber-50 border-2 border-dashed border-gray-300 rounded-2xl p-6">
                         <h3 className="text-xl font-bold text-slate-800 mb-6">Shop Profile</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
@@ -250,7 +250,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     name="shopName"
                                     value={profileForm.shopName}
                                     onChange={handleProfileChange}
-                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                             </div>
                             <div>
@@ -260,7 +260,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     name="name"
                                     value={profileForm.name}
                                     onChange={handleProfileChange}
-                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                             </div>
                             <div>
@@ -270,7 +270,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     name="phone"
                                     value={profileForm.phone}
                                     onChange={handleProfileChange}
-                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                             </div>
                             <div>
@@ -279,7 +279,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     name="specialization"
                                     value={profileForm.specialization}
                                     onChange={handleProfileChange}
-                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 >
                                     <option value="all">All (Unisex)</option>
                                     <option value="men">Men's Wear</option>
@@ -299,7 +299,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                     value={profileForm.street}
                                     onChange={handleProfileChange}
                                     placeholder="Street Address"
-                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                                 <div className="grid grid-cols-3 gap-4">
                                     <input
@@ -308,7 +308,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                         value={profileForm.city}
                                         onChange={handleProfileChange}
                                         placeholder="City"
-                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                     <input
                                         type="text"
@@ -316,7 +316,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                         value={profileForm.state}
                                         onChange={handleProfileChange}
                                         placeholder="State"
-                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                     <input
                                         type="text"
@@ -325,7 +325,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                                         onChange={handleProfileChange}
                                         placeholder="Pincode"
                                         maxLength="6"
-                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                                        className="w-full px-4 py-3 rounded-xl bg-white/60 border border-white/40 focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                 </div>
                             </div>
@@ -340,7 +340,7 @@ const ProfileModal = ({ isOpen, onClose, tailorData, onUpdate }) => {
                         <button
                             onClick={handleSaveProfile}
                             disabled={savingProfile}
-                            className="mt-6 px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="mt-6 px-6 py-3 bg-[#6b4423] text-white rounded-xl font-medium hover:bg-[#573619] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {savingProfile ? 'Saving...' : 'Save Changes'}
                         </button>

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import DashboardStats from '../components/DashboardStats'
-import RecentOrders from '../components/RecentOrders'
-import DashboardSidebar from '../components/DashboardSidebar'
+import DashboardStats from '../../components/Tailor/DashboardStats'
+import RecentOrders from '../../components/Tailor/RecentOrders'
+import DashboardSidebar from '../../components/Tailor/DashboardSidebar'
 
 const TailorDashboard = () => {
     const navigate = useNavigate();
@@ -52,14 +52,14 @@ const TailorDashboard = () => {
 
     if (!tailorData) {
         return (
-            <div className="w-full min-h-screen flex items-center justify-center bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50">
+            <div className="w-full min-h-screen flex items-center justify-center bg-[#f5f5f0]">
                 <div className="text-slate-600 text-lg">Loading dashboard...</div>
             </div>
         );
     }
 
     return (
-        <div className="w-full min-h-screen flex bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50 text-slate-900">
+        <div className="w-full min-h-screen flex bg-[#f5f5f0] text-slate-900">
             {/* Sidebar with Profile Modal */}
             <DashboardSidebar
                 tailorData={tailorData}
@@ -80,7 +80,7 @@ const TailorDashboard = () => {
                     {/* Mobile: Show Shop Info */}
                     <div className="lg:hidden bg-white/60 p-3 rounded-xl border border-white/50">
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-linear-to-br from-violet-600 to-fuchsia-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                            <div className="w-8 h-8 bg-linear-to-br from-[#6b4423] to-[#8b5a3c] rounded-full flex items-center justify-center text-white font-bold text-xs">
                                 {tailorData.name?.substring(0, 2).toUpperCase()}
                             </div>
                             <div>

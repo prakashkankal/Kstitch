@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import ProfileModal from './ProfileModal'
+import ProfileModal from '../Customer/ProfileModal'
 
 const DashboardSidebar = ({ tailorData, onLogout, onUpdateTailorData }) => {
     const location = useLocation();
@@ -25,10 +25,10 @@ const DashboardSidebar = ({ tailorData, onLogout, onUpdateTailorData }) => {
 
     return (
         <>
-            <aside className="hidden lg:flex w-72 flex-col fixed inset-y-0 left-0 bg-white/30 backdrop-blur-2xl border-r border-white/60 p-6 z-40">
+            <aside className="hidden lg:flex w-72 flex-col fixed inset-y-0 left-0 bg-white border-r-2 border-dashed border-gray-300 p-6 z-40">
                 <div className="mb-10 pl-2">
-                    <h4 className="text-2xl font-bold bg-linear-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent font-serif">StyleEase</h4>
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Partner</span>
+                    <h4 className="text-2xl font-bold text-[#6b4423] font-serif">StyleEase</h4>
+                    <span className="text-xs font-semibold text-amber-700 uppercase tracking-widest">Partner</span>
                 </div>
 
                 <nav className="flex flex-col gap-2 flex-1">
@@ -37,8 +37,8 @@ const DashboardSidebar = ({ tailorData, onLogout, onUpdateTailorData }) => {
                             key={item.path}
                             to={item.path}
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${location.pathname === item.path
-                                ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
-                                : 'text-slate-600 hover:bg-white/40 hover:text-violet-600'
+                                ? 'bg-[#6b4423] text-white shadow-lg'
+                                : 'text-slate-600 hover:bg-amber-50 hover:text-[#6b4423]'
                                 }`}
                         >
                             <span>{item.icon}</span> {item.label}
@@ -50,7 +50,7 @@ const DashboardSidebar = ({ tailorData, onLogout, onUpdateTailorData }) => {
                     {/* Tailor Profile Card - Click to edit */}
                     <button
                         onClick={() => setShowProfileModal(true)}
-                        className="w-full bg-white/40 hover:bg-white/60 p-4 rounded-2xl border border-white/50 hover:border-violet-300 flex items-center gap-3 transition-all cursor-pointer group"
+                        className="w-full bg-amber-50 hover:bg-amber-100 p-4 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#6b4423] flex items-center gap-3 transition-all cursor-pointer group"
                     >
                         <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-white/50">
                             {tailorData.shopImage ? (
@@ -60,16 +60,16 @@ const DashboardSidebar = ({ tailorData, onLogout, onUpdateTailorData }) => {
                                     className="w-full h-full object-cover"
                                 />
                             ) : (
-                                <div className="w-full h-full bg-linear-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-white font-bold text-sm">
+                                <div className="w-full h-full bg-linear-to-br from-[#6b4423] to-[#8b5a3c] flex items-center justify-center text-white font-bold text-sm">
                                     {getInitials(tailorData.name)}
                                 </div>
                             )}
                         </div>
                         <div className="flex-1 min-w-0 text-left">
                             <p className="text-sm font-bold text-slate-800 truncate">{tailorData.shopName}</p>
-                            <p className="text-xs text-emerald-600 font-medium">Click to edit profile</p>
+                            <p className="text-xs text-amber-700 font-medium">Click to edit profile</p>
                         </div>
-                        <span className="text-slate-400 group-hover:text-violet-600 transition-colors">⚙️</span>
+                        <span className="text-slate-400 group-hover:text-[#6b4423] transition-colors">⚙️</span>
                     </button>
 
                     {/* Logout Button */}

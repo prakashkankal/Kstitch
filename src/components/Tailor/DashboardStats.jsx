@@ -66,7 +66,7 @@ const DashboardStats = ({ tailorId }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {statsDisplay.map((stat, index) => (
-                <div key={index} className="bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-2xl shadow-lg shadow-violet-500/5 hover:shadow-violet-500/10 transition-all">
+                <div key={index} className="bg-white border-2 border-dashed border-gray-300 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all">
                     <div className="flex justify-between items-start mb-4">
                         <div className="text-4xl">{stat.icon}</div>
                         <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">{stat.change}</span>

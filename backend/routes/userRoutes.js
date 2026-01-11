@@ -53,6 +53,13 @@ router.post('/register', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
+                profilePhoto: user.profilePhoto,
+                bio: user.bio,
+                dateOfBirth: user.dateOfBirth,
+                gender: user.gender,
+                city: user.city,
+                country: user.country,
+                alternatePhone: user.alternatePhone,
                 token: generateToken(user._id)
             });
         }
@@ -87,6 +94,13 @@ router.post('/login', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
+                profilePhoto: user.profilePhoto,
+                bio: user.bio,
+                dateOfBirth: user.dateOfBirth,
+                gender: user.gender,
+                city: user.city,
+                country: user.country,
+                alternatePhone: user.alternatePhone,
                 token: generateToken(user._id)
             });
         } else {
@@ -95,6 +109,69 @@ router.post('/login', async (req, res) => {
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Server error during login' });
+    }
+});
+
+// Authentication Middleware
+const protect = async (req, res, next) => {
+    let token;
+
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        try {
+            token = req.headers.authorization.split(' ')[1];
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = await User.findById(decoded.id).select('-password');
+            next();
+        } catch (error) {
+            res.status(401).json({ message: 'Not authorized, token failed' });
+        }
+    }
+
+    if (!token) {
+        res.status(401).json({ message: 'Not authorized, no token' });
+    }
+};
+
+// @route   PUT /api/users/profile
+// @desc    Update user profile
+// @access  Private
+router.put('/profile', protect, async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id);
+
+        if (user) {
+            user.name = req.body.name || user.name;
+            user.phone = req.body.phone || user.phone;
+            user.profilePhoto = req.body.profilePhoto !== undefined ? req.body.profilePhoto : user.profilePhoto;
+            user.bio = req.body.bio !== undefined ? req.body.bio : user.bio;
+            user.dateOfBirth = req.body.dateOfBirth !== undefined ? req.body.dateOfBirth : user.dateOfBirth;
+            user.gender = req.body.gender !== undefined ? req.body.gender : user.gender;
+            user.city = req.body.city !== undefined ? req.body.city : user.city;
+            user.country = req.body.country !== undefined ? req.body.country : user.country;
+            user.alternatePhone = req.body.alternatePhone !== undefined ? req.body.alternatePhone : user.alternatePhone;
+
+            const updatedUser = await user.save();
+
+            res.json({
+                _id: updatedUser._id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                phone: updatedUser.phone,
+                profilePhoto: updatedUser.profilePhoto,
+                bio: updatedUser.bio,
+                dateOfBirth: updatedUser.dateOfBirth,
+                gender: updatedUser.gender,
+                city: updatedUser.city,
+                country: updatedUser.country,
+                alternatePhone: updatedUser.alternatePhone,
+                token: generateToken(updatedUser._id)
+            });
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        console.error('Profile update error:', error);
+        res.status(500).json({ message: 'Server error during profile update' });
     }
 });
 

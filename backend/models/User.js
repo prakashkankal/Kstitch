@@ -21,6 +21,34 @@ const userSchema = mongoose.Schema({
     phone: {
         type: String,
         required: false
+    },
+    profilePhoto: {
+        type: String,  // Store base64 encoded image
+        required: false
+    },
+    bio: {
+        type: String,
+        required: false
+    },
+    dateOfBirth: {
+        type: String,
+        required: false
+    },
+    gender: {
+        type: String,
+        required: false
+    },
+    city: {
+        type: String,
+        required: false
+    },
+    country: {
+        type: String,
+        required: false
+    },
+    alternatePhone: {
+        type: String,
+        required: false
     }
 }, {
     timestamps: true

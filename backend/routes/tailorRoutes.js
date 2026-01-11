@@ -242,4 +242,21 @@ router.get('/', async (req, res) => {
     }
 });
 
+// @desc    Get single tailor by ID
+// @route   GET /api/tailors/:id
+// @access  Public
+router.get('/:id', async (req, res) => {
+    try {
+        const tailor = await Tailor.findById(req.params.id).select('-password');
+
+        if (!tailor) {
+            return res.status(404).json({ message: 'Tailor not found' });
+        }
+
+        res.json(tailor);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
 export default router;
