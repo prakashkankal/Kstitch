@@ -7,7 +7,15 @@
     "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "test:prod": "playwright test --config=playwright.config.prod.js",
+    "test:prod:headed": "playwright test --config=playwright.config.prod.js --headed",
+    "test:prod:report": "playwright show-report"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.4",
@@ -22,6 +30,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.58.1",
+    "@types/node": "^25.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
