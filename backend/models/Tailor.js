@@ -10,15 +10,23 @@ const tailorSchema = mongoose.Schema({
     googleId: { type: String, unique: true, sparse: true },
     shopName: { type: String, required: true },
     shopImage: { type: String, default: '' },
+    bannerImage: { type: String, default: '' },
     bio: { type: String, default: '' },
     specialization: { type: String, enum: ['men', 'women', 'kids', 'all'], default: 'all' },
     experience: { type: Number, required: true },
+    services: { type: [String], default: [] },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     address: {
         street: { type: String, required: true },
         city: { type: String, required: true },
         state: { type: String, required: true },
         pincode: { type: String, required: true }
+    },
+    location: {
+        latitude: { type: Number },
+        longitude: { type: Number },
+        address: { type: String },
+        locationSet: { type: Boolean, default: false }
     },
     businessHours: {
         type: Map,
@@ -36,7 +44,15 @@ const tailorSchema = mongoose.Schema({
             Saturday: { open: '09:00', close: '18:00', closed: false },
             Sunday: { open: '09:00', close: '18:00', closed: true }
         }
-    }
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    verificationToken: String,
+    verificationTokenExpire: Date
 }, {
     timestamps: true
 });

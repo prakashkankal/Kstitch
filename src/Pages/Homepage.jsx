@@ -19,14 +19,25 @@ const Homepage = () => {
   const [showNavbarSearch, setShowNavbarSearch] = useState(false);
   const heroSearchRef = useRef(null);
 
-  // Fetch tailors with pagination
-  const fetchTailors = async (skipValue = 0, append = false) => {
+  const [searchParams, setSearchParams] = useState({});
+
+  // Fetch tailors with pagination and search/filter support
+  const fetchTailors = async (skipValue = 0, append = false, currentSearchParams = searchParams) => {
     if (loading) return;
 
     try {
       setLoading(true);
       const limit = 8;
-      const response = await axios.get(`${API_URL}/api/tailors?limit=${limit}&skip=${skipValue}`);
+
+      // Build Query String from params
+      let queryStr = `limit=${limit}&skip=${skipValue}`;
+      if (currentSearchParams.service) queryStr += `&service=${encodeURIComponent(currentSearchParams.service)}`;
+      if (currentSearchParams.location && currentSearchParams.location !== 'Nearby') queryStr += `&locationText=${encodeURIComponent(currentSearchParams.location)}`;
+      if (currentSearchParams.lat) queryStr += `&lat=${currentSearchParams.lat}`;
+      if (currentSearchParams.lng) queryStr += `&lng=${currentSearchParams.lng}`;
+      if (currentSearchParams.radius) queryStr += `&radius=${currentSearchParams.radius}`;
+
+      const response = await axios.get(`${API_URL}/api/tailors?${queryStr}`);
 
       const newTailors = response.data.tailors || [];
 
@@ -49,6 +60,14 @@ const Homepage = () => {
   useEffect(() => {
     fetchTailors(0, false);
   }, []);
+
+  const handleSearch = (searchData) => {
+    // searchData: { service, location, lat, lng, radius }
+    setSearchParams(searchData);
+    setSkip(0);
+    setHasMore(true);
+    fetchTailors(0, false, searchData);
+  };
 
   // Handle scroll for search bar transitions
   useEffect(() => {
@@ -103,17 +122,17 @@ const Homepage = () => {
 
     window.addEventListener('scroll', handleInfiniteScroll);
     return () => window.removeEventListener('scroll', handleInfiniteScroll);
-  }, [loading, hasMore, skip]);
+  }, [loading, hasMore, skip, searchParams]); // Add searchParams dependency
 
   return (
     <div className="w-full min-h-screen bg-[#faf8f5]">
       {/* Navbar with conditional search bar */}
-      <Navbar showSearchBar={showNavbarSearch} />
+      <Navbar showSearchBar={showNavbarSearch} onSearch={handleSearch} />
 
       {/* Hero Section with integrated search bar */}
       <HeroPage
         heroSearchRef={heroSearchRef}
-        onSearch={(data) => console.log('Search:', data)}
+        onSearch={handleSearch}
       />
 
       {/* Main Content */}

@@ -12,6 +12,7 @@ import TailorProfile from './Pages/Tailor/TailorProfile'
 import TailorSettings from './Pages/Tailor/TailorSettings'
 import NewOrder from './Pages/Tailor/NewOrder'
 import OrderDetailsPage from './Pages/Tailor/OrderDetailsPage'
+import TailorCustomerDetails from './Pages/Tailor/TailorCustomerDetails'
 import MeasurementPresets from './Pages/Tailor/MeasurementPresets'
 import Login from './Pages/Login'
 import UserRegistration from './Pages/UserRegistration'
@@ -19,6 +20,9 @@ import Profile from './Pages/Customer/Profile'
 import CustomerOrders from './Pages/Customer/CustomerOrders'
 import TailorDetailPage from './Pages/Tailor/TailorDetailPage'
 import PostDetail from './Pages/Tailor/PostDetail'
+import ForgotPassword from './Pages/Auth/ForgotPassword'
+import ResetPassword from './Pages/Auth/ResetPassword'
+import VerifyEmail from './Pages/Auth/VerifyEmail'
 import Navbar from './components/Shared/Navbar'
 import BottomNav from './components/Shared/BottomNav'
 
@@ -68,6 +72,9 @@ const App = () => {
         <Routes>
           <Route path="/" element={<HomePageWrapper />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:resetToken" element={<ResetPassword />} />
+          <Route path="/verify-email/:verificationToken" element={<VerifyEmail />} />
           <Route path="/signup" element={<RoleSelection />} />
           <Route path="/signup/customer" element={<UserRegistration />} />
           <Route path="/signup/tailor" element={<TailorRegistration />} />
@@ -77,7 +84,9 @@ const App = () => {
           <Route path="/my-orders" element={<CustomerOrders />} />
           <Route path="/tailor/:id" element={
             <>
-              <Navbar />
+              <div className="hidden md:block">
+                <Navbar />
+              </div>
               <TailorDetailPage />
             </>
           } />
@@ -114,6 +123,11 @@ const App = () => {
           <Route path="/dashboard/customers" element={
             <ProtectedTailorRoute>
               <TailorCustomers />
+            </ProtectedTailorRoute>
+          } />
+          <Route path="/dashboard/customers/:phone" element={
+            <ProtectedTailorRoute>
+              <TailorCustomerDetails />
             </ProtectedTailorRoute>
           } />
           <Route path="/dashboard/reviews" element={

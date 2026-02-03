@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import User from '../models/User.js';
 import Tailor from '../models/Tailor.js';
+import crypto from 'crypto';
+import sendEmail from '../utils/sendEmail.js';
 
 const router = express.Router();
 
@@ -25,6 +27,10 @@ router.post('/login', async (req, res) => {
         // Check Tailor
         const tailor = await Tailor.findOne({ email });
         if (tailor && (await tailor.matchPassword(password))) {
+            if (!tailor.isVerified) {
+                return res.status(401).json({ message: 'Please verify your email address to log in.' });
+            }
+
             return res.json({
                 _id: tailor._id,
                 name: tailor.name,
@@ -44,6 +50,10 @@ router.post('/login', async (req, res) => {
         // Check User
         const user = await User.findOne({ email });
         if (user && (await user.matchPassword(password))) {
+            if (!user.isVerified) {
+                return res.status(401).json({ message: 'Please verify your email address to log in.' });
+            }
+
             return res.json({
                 _id: user._id,
                 name: user.name,
@@ -162,6 +172,141 @@ router.post('/google', async (req, res) => {
     } catch (error) {
         console.error('Google Auth Error:', error);
         res.status(401).json({ message: 'Google authentication failed', error: error.message });
+    }
+
+
+});
+
+// @route   POST /api/auth/forgot-password
+// @desc    Forgot Password - Send Reset Email
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        let user = await Tailor.findOne({ email });
+        let userType = 'tailor';
+
+        if (!user) {
+            user = await User.findOne({ email });
+            userType = 'customer';
+        }
+
+        if (!user) {
+            return res.status(404).json({ message: 'No account with that email found' });
+        }
+
+        // Generate Reset Token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        const resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        user.resetPasswordToken = resetPasswordToken;
+        user.resetPasswordExpire = resetPasswordExpire;
+        await user.save();
+
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+
+        const message = `
+            <h1>You have requested a password reset</h1>
+            <p>Please go to this link to reset your password:</p>
+            <a href=${resetUrl} clicktracking=off>${resetUrl}</a>
+            <p>This link will expire in 10 minutes.</p>
+        `;
+
+        try {
+            await sendEmail({
+                email: user.email,
+                subject: 'Password Reset Request',
+                message,
+                html: message
+            });
+
+            res.status(200).json({ success: true, data: 'Email sent' });
+        } catch (error) {
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpire = undefined;
+            await user.save();
+            return res.status(500).json({ message: 'Email could not be sent' });
+        }
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   PUT /api/auth/reset-password/:resetToken
+// @desc    Reset Password
+router.put('/reset-password/:resetToken', async (req, res) => {
+    try {
+        const resetPasswordToken = crypto.createHash('sha256').update(req.params.resetToken).digest('hex');
+
+        let user = await Tailor.findOne({
+            resetPasswordToken,
+            resetPasswordExpire: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            user = await User.findOne({
+                resetPasswordToken,
+                resetPasswordExpire: { $gt: Date.now() }
+            });
+        }
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired token' });
+        }
+
+        user.password = req.body.password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+
+        await user.save();
+
+        res.status(200).json({ success: true, data: 'Password reset success' });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   PUT /api/auth/verify-email/:verificationToken
+// @desc    Verify Email Address
+router.put('/verify-email/:verificationToken', async (req, res) => {
+    try {
+        const { verificationToken } = req.params;
+
+        let user = await Tailor.findOne({
+            verificationToken,
+            verificationTokenExpire: { $gt: Date.now() }
+        });
+
+        let userType = 'tailor';
+
+        if (!user) {
+            user = await User.findOne({
+                verificationToken,
+                verificationTokenExpire: { $gt: Date.now() }
+            });
+            userType = 'customer';
+        }
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired verification token' });
+        }
+
+        user.isVerified = true;
+        user.verificationToken = undefined;
+        user.verificationTokenExpire = undefined;
+
+        await user.save();
+
+        res.status(200).json({ success: true, data: 'Email Verified Successfully', message: 'Email verified. You can now login.' });
+
+    } catch (error) {
+        console.error("Verification Error: ", error);
+        res.status(500).json({ message: 'Server Error' });
     }
 });
 

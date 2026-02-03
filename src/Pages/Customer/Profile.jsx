@@ -480,13 +480,55 @@ const Profile = () => {
                             </div>
 
                             <div className="space-y-4">
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" /></div>
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Phone</label><input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" placeholder="+91..." /></div>
+                                {/* Bio */}
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Bio</label><textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" placeholder="Tell us about yourself..." /></div>
+
+                                {/* Full Name */}
+                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label><input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" /></div>
+
+                                {/* Email (Locked) */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
+                                    <div className="w-full p-4 bg-slate-100 rounded-xl border border-slate-200 text-slate-500 flex justify-between items-center">
+                                        <span className="truncate">{user.email}</span>
+                                        <span className="text-xs ml-2 flex-shrink-0">(Locked)</span>
+                                    </div>
+                                </div>
+
+                                {/* Phone */}
+                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Phone</label><input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" placeholder="+91..." /></div>
+
+                                {/* Date of Birth */}
+                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Date of Birth</label><input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" /></div>
+
+                                {/* Gender */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Gender</label>
+                                    <select name="gender" value={formData.gender} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none">
+                                        <option value="">Select Gender</option>
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                        <option value="other">Other</option>
+                                        <option value="prefer-not-to-say">Prefer not to say</option>
+                                    </select>
+                                </div>
+
+                                {/* City & Country */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">City</label><input type="text" name="city" value={formData.city} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" /></div>
                                     <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Country</label><input type="text" name="country" value={formData.country} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" /></div>
                                 </div>
+
+                                {/* Member Since */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Member Since</label>
+                                    <div className="w-full p-4 bg-slate-100 rounded-xl border border-slate-200 text-slate-500">
+                                        {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                    </div>
+                                </div>
+
+                                {/* Alternate Phone */}
+                                <div><label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Alternate Phone</label><input type="tel" name="alternatePhone" value={formData.alternatePhone} onChange={handleChange} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#8B7355] focus:outline-none" placeholder="+91..." /></div>
                             </div>
                         </div>
                     </div>

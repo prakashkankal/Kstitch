@@ -1,120 +1,62 @@
 import React from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import TailorCard from './TailorCard';
 
 const TailorShowcase = ({ tailors, loading, hasMore }) => {
-    const navigate = useNavigate();
-
     // Display all tailors (no limit for infinite scroll)
     const displayTailors = tailors && tailors.length > 0 ? tailors : [];
 
-    const renderStars = (rating) => {
-        return [...Array(5)].map((_, i) => (
-            <svg key={i} className="w-4 h-4 fill-amber-400" viewBox="0 0 20 20">
-                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-        ));
-    };
-
     return (
-        <div className='w-full py-6 md:py-16 bg-[#faf8f5]'>
-            <div className='max-w-7xl mx-auto px-4 md:px-6'>
-                {/* Section Header - Compact on mobile */}
-                <div className='text-start mb-4 md:mb-12'>
-                    <h2 className='text-2xl md:text-4xl font-serif font-bold text-gray-900 mb-2 md:mb-4'>
-                        Find Your Perfect <span className='text-amber-600'>Tailor</span>
+        <section className="w-full bg-[#faf8f5] py-6 md:py-8">
+            <div className="mx-auto max-w-[1440px] px-6 md:px-10 xl:px-20">
+                {/* Section Header */}
+                <div className="mb-6">
+                    <h2 className="text-2xl font-semibold text-gray-900">
+                        Tailors near you
                     </h2>
                 </div>
 
-                {/* Tailor Cards Grid - Responsive, compact on mobile */}
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 tailor-grid-mobile'>
+                {/* Tailor Cards Grid - Airbnb Style */}
+                {/* Mobile: 2 cols, Tablet: 3 cols, Desktop: 4 cols */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:gap-x-6 md:gap-y-10 md:grid-cols-3 lg:grid-cols-4 xl:gap-x-8">
                     {displayTailors.map((tailor) => (
-                        <Link
-                            key={tailor._id}
-                            to={`/tailor/${tailor._id}`}
-                            className='block bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-300 cursor-pointer group border-2 border-dashed border-gray-200 hover:border-[#6b4423]'
-                        >
-                            {/* Mobile: Horizontal Layout, Desktop: Vertical Layout */}
-                            <div className='md:block flex flex-row gap-4 md:gap-0'>
-                                {/* Image - Smaller on mobile, on left side */}
-                                <div className='relative w-24 md:w-full md:h-48 shrink-0 overflow-hidden bg-linear-to-br from-amber-100 to-orange-100'>
-                                    <img
-                                        src={tailor.shopImage || `https://ui-avatars.com/api/?name=${tailor.name}&size=400&background=6b4423&color=fff`}
-                                        alt={tailor.name}
-                                        className='w-full h-full object-cover group-hover:scale-110 transition-transform duration-300'
-                                    />
-                                    {/* Availability Badge */}
-                                    <div className='absolute top-1 left-1 md:top-2 md:left-2'>
-                                        <span className={`px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-xs font-semibold backdrop-blur-sm ${tailor.availability === 'Available' ? 'bg-green-500/90 text-white' : 'bg-gray-500/90 text-white'}`}>
-                                            {tailor.availability}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Card Content - Takes remaining space on mobile */}
-                                <div className='flex-1 p-3 md:p-4'>
-                                    {/* Header: Name & Rating */}
-                                    <div className='flex items-start justify-between gap-2 mb-2'>
-                                        {/* Tailor Name & Shop */}
-                                        <div className='flex-1 min-w-0'>
-                                            <h3 className='text-base md:text-lg font-bold text-gray-900 truncate'>{tailor.name}</h3>
-                                            <p className='text-xs text-gray-600 truncate'>{tailor.shopName}</p>
-                                        </div>
-
-                                        {/* Rating - Top Right */}
-                                        <div className='flex items-center gap-1 shrink-0'>
-                                            <svg className='w-4 h-4 fill-amber-400' viewBox='0 0 20 20'>
-                                                <path d='M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z' />
-                                            </svg>
-                                            <span className='text-sm font-semibold text-gray-900'>{tailor.rating}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Specialization */}
-                                    <div className='flex items-center gap-1.5 mb-1 md:mb-2'>
-                                        <svg className='w-3.5 h-3.5 text-amber-600 shrink-0' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' />
-                                        </svg>
-                                        <span className='text-xs text-gray-700 font-medium truncate'>{tailor.specialization}</span>
-                                    </div>
-
-                                    {/* Address */}
-                                    <div className='flex items-start gap-1.5 mb-2 md:mb-3'>
-                                        <svg className='w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z' />
-                                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 11a3 3 0 11-6 0 3 3 0 016 0z' />
-                                        </svg>
-                                        <span className='text-xs text-gray-600 line-clamp-1'>
-                                            {tailor.address?.city || 'Mumbai'}, {tailor.address?.state || 'Maharashtra'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </Link>
+                        <TailorCard key={tailor._id} tailor={tailor} />
                     ))}
                 </div>
 
                 {/* Loading Spinner */}
                 {loading && (
-                    <div className="flex justify-center items-center py-8">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
+                    <div className="flex items-center justify-center py-12">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-black"></div>
                     </div>
                 )}
 
                 {/* No More Tailors Message */}
                 {!loading && !hasMore && tailors.length > 0 && (
-                    <div className="text-center py-8">
-                        <p className="text-gray-600 text-sm">You've reached the end! No more tailors to show.</p>
+                    <div className="py-12 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="text-lg font-medium text-gray-900">
+                                You've seen all tailors
+                            </span>
+                            <span className="text-sm text-gray-500">
+                                Check back later for more!
+                            </span>
+                        </div>
                     </div>
                 )}
 
                 {/* No Tailors Available */}
                 {!loading && tailors.length === 0 && (
-                    <div className="text-center py-12">
-                        <p className="text-gray-600 text-lg">No tailors available at the moment.</p>
+                    <div className="flex h-64 flex-col items-center justify-center text-center">
+                        <p className="text-lg font-medium text-gray-900">
+                            No tailors found
+                        </p>
+                        <p className="text-gray-500">
+                            Try adjusting your search filters
+                        </p>
                     </div>
                 )}
             </div>
-        </div>
+        </section>
     );
 };
 

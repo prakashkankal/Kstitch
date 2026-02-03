@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import MobileSearchScreen from './MobileSearchScreen';
 import SearchBar from './SearchBar';
 
-const Navbar = ({ showSearchBar = false }) => {
+const Navbar = ({ showSearchBar = false, onSearch }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const [isScrolled, setIsScrolled] = useState(false);
@@ -87,7 +87,10 @@ const Navbar = ({ showSearchBar = false }) => {
 
             {/* Mobile Search Screen */}
             {mobileSearchOpen && (
-                <MobileSearchScreen onClose={() => setMobileSearchOpen(false)} />
+                <MobileSearchScreen
+                    onClose={() => setMobileSearchOpen(false)}
+                    onSearch={onSearch}
+                />
             )}
 
             {/* Desktop Navbar (Existing) */}
@@ -114,7 +117,7 @@ const Navbar = ({ showSearchBar = false }) => {
                     {/* Center: Search Bar (shown when showSearchBar is true) */}
                     {showSearchBar && (
                         <div className="hidden lg:block flex-1 max-w-2xl mx-8 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full">
-                            <SearchBar compact={true} />
+                            <SearchBar compact={true} onSearch={onSearch} />
                         </div>
                     )}
 

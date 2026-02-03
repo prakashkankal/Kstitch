@@ -68,9 +68,17 @@ export const calculateProfileCompletion = (tailor) => {
         // To balance weight: Let's say top level fields are 1 point each. Address block is 1 point.
     }
 
+    // Check Location (Pinned Map Location)
+    let isLocationSet = false;
+    if (tailor.location && tailor.location.locationSet) {
+        isLocationSet = true;
+    } else {
+        missingFields.push('Pinned Map Location');
+    }
+
     // Let's strictly count fields for percentage
-    const totalPoints = requiredFields.length + requiredAddressFields.length;
-    let earnedPoints = completedCount + addressCompletedCount;
+    const totalPoints = requiredFields.length + requiredAddressFields.length + 1; // +1 for Location
+    let earnedPoints = completedCount + addressCompletedCount + (isLocationSet ? 1 : 0);
 
     const percentage = Math.round((earnedPoints / totalPoints) * 100);
 

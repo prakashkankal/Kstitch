@@ -155,7 +155,7 @@ const Customers = () => {
                     </div>
                 ) : customers.length === 0 ? (
                     <div className="p-12 text-center bg-white/60 rounded-2xl border border-white/50">
-                        <div className="text-6xl mb-4">👥</div>
+                        <div className="text-6xl mb-4">�</div>
                         <p className="text-slate-600 text-lg">No customers yet. Customers will appear here once you start taking orders.</p>
                     </div>
                 ) : (

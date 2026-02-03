@@ -14,6 +14,9 @@ const OrderDetailsPage = () => {
     const [editingNotes, setEditingNotes] = useState(false);
     const [notes, setNotes] = useState('');
     const [tailorData, setTailorData] = useState(null);
+    const [activeSection, setActiveSection] = useState(null);
+    const [paymentMode, setPaymentMode] = useState('Cash');
+    const [finalPaymentAmount, setFinalPaymentAmount] = useState(0);
 
     // Get logged-in tailor data
     useEffect(() => {
@@ -58,18 +61,41 @@ const OrderDetailsPage = () => {
         }
     }, [orderId]);
 
+    useEffect(() => {
+        if (order) {
+            setFinalPaymentAmount(order.price - (order.advancePayment || 0));
+        }
+    }, [order]);
+
     const handleStatusUpdate = async (newStatus) => {
         if (!order) return;
 
         try {
             setUpdatingStatus(true);
-            await axios.put(`${API_URL}/api/orders/${order._id}/status`, {
-                status: newStatus
-            });
+            const payload = { status: newStatus };
 
-            // Refresh order data
-            const { data } = await axios.get(`${API_URL}/api/orders/details/${orderId}`);
-            setOrder(data.order);
+            // Add payment details if marking as Delivered
+            if (newStatus === 'Delivered') {
+                payload.paymentMode = paymentMode;
+                payload.finalPaymentAmount = parseFloat(finalPaymentAmount);
+            }
+
+            const { data } = await axios.put(`${API_URL}/api/orders/${order._id}/status`, payload);
+
+            // Handle WhatsApp Bill
+            if (data.whatsappMessage && data.customerPhone) {
+                const encodedMessage = encodeURIComponent(data.whatsappMessage);
+                const whatsappUrl = `https://wa.me/${data.customerPhone.replace(/\D/g, '')}?text=${encodedMessage}`;
+                window.open(whatsappUrl, '_blank');
+            }
+
+            // Refresh order data (using the returned order if valid, or refetching)
+            if (data.order) {
+                setOrder(data.order);
+            } else {
+                const refreshRes = await axios.get(`${API_URL}/api/orders/details/${orderId}`);
+                setOrder(refreshRes.data.order);
+            }
         } catch (err) {
             console.error('Error updating status:', err);
             alert(err.response?.data?.message || 'Failed to update order status');
@@ -122,6 +148,7 @@ const OrderDetailsPage = () => {
             'Order Created': 'bg-yellow-100 text-yellow-700 border border-yellow-300',
             'Cutting Completed': 'bg-blue-100 text-blue-700 border border-blue-300',
             'Order Completed': 'bg-green-100 text-green-700 border border-green-300',
+            'Delivered': 'bg-slate-100 text-slate-700 border border-slate-300',
             'Pending': 'bg-amber-100 text-amber-700 border border-amber-300',
             'In Progress': 'bg-blue-100 text-blue-700 border border-blue-300',
             'Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-300'
@@ -176,7 +203,9 @@ const OrderDetailsPage = () => {
                     <div className="max-w-6xl mx-auto">
                         <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-8">
                             <div className="text-center">
-                                <div className="text-6xl mb-4">⚠️</div>
+                                <svg className="w-16 h-16 mb-4 text-amber-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
                                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Order Not Found</h2>
                                 <p className="text-slate-600 mb-6">{error || 'The order you are looking for does not exist.'}</p>
                                 <button
@@ -201,26 +230,31 @@ const OrderDetailsPage = () => {
                 onUpdateTailorData={handleUpdateTailorData}
             />
             <div className="flex-1 lg:ml-72 overflow-y-auto bg-linear-to-br from-indigo-50 via-purple-50 to-pink-50">
-                <div className="max-w-6xl mx-auto p-8">
+                <div className="max-w-6xl mx-auto p-4 pt-16 pb-24 md:p-8">
                     {/* Header with Back Button */}
-                    <div className="mb-6 flex items-center justify-between">
+                    <div className="mb-4 md:mb-6 flex items-center justify-between">
                         <button
                             onClick={() => navigate('/dashboard')}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white/80 border border-white/60 rounded-lg transition-all text-slate-700 hover:text-slate-900 font-medium"
+                            className="flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-white/60 hover:bg-white/80 border border-white/60 rounded-lg transition-all text-slate-700 hover:text-slate-900 font-medium text-xs md:text-base"
                         >
                             <span>←</span>
-                            <span>Back to Dashboard</span>
+                            <span className="md:hidden">Back</span>
+                            <span className="hidden md:inline">Back to Dashboard</span>
                         </button>
                         <div className="text-right">
-                            <h1 className="text-3xl font-bold text-slate-800">Order Details</h1>
-                            <p className="text-sm text-slate-500 mt-1">#{order._id.slice(-8).toUpperCase()}</p>
+                            <h1 className="text-xl md:text-3xl font-bold text-slate-800">Order Details</h1>
+                            <p className="text-xs md:text-sm text-slate-500 mt-0.5 md:mt-1">#{order._id.slice(-8).toUpperCase()}</p>
                         </div>
                     </div>
 
-                    {/* SECTION 1: ORDER SUMMARY */}
-                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6 mb-6">
+                    {/* SECTION 1: ORDER SUMMARY (Mobile Accordion / Desktop Grid) */}
+
+                    {/* Desktop View (Unchanged) */}
+                    <div className="hidden md:block bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6 mb-6">
                         <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <span>📋</span>
+                            <svg className="w-5 h-5 md:w-6 md:h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
                             Order Summary
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -236,7 +270,11 @@ const OrderDetailsPage = () => {
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Garment Type</p>
-                                <p className="text-base font-semibold text-slate-800">{order.orderType}</p>
+                                <p className="text-base font-semibold text-slate-800">
+                                    {order.orderItems && order.orderItems.length > 0
+                                        ? order.orderItems.map(item => item.garmentType).join(', ')
+                                        : order.orderType}
+                                </p>
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Due Date</p>
@@ -261,10 +299,89 @@ const OrderDetailsPage = () => {
                         </div>
                     </div>
 
-                    {/* SECTION 2: CUSTOMER DETAILS */}
-                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6 mb-6">
+                    {/* Mobile View (Accordion) */}
+                    <div className="md:hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg mb-3 overflow-hidden transition-all duration-300">
+                        {/* Header */}
+                        <div
+                            onClick={() => setActiveSection(activeSection === 'summary' ? null : 'summary')}
+                            className="p-4 flex items-center justify-between cursor-pointer"
+                        >
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                </svg>
+                                Order Summary
+                            </h2>
+                            <svg
+                                className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${activeSection === 'summary' ? 'rotate-180' : ''}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+
+                        {/* Collapsed Preview (Visible when CLOSED) */}
+                        <div className={`px-4 pb-4 ${activeSection === 'summary' ? 'hidden' : 'block'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">Order ID</p>
+                                    <p className="text-sm font-semibold text-slate-800">#{order._id.slice(-8).toUpperCase()}</p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadge(order.status)}`}>
+                                    {order.status}
+                                </span>
+                            </div>
+                            <div className="bg-red-50 rounded-lg p-2 border border-red-100 flex items-center justify-between">
+                                <p className="text-[10px] text-red-500 uppercase tracking-wide font-bold">Balance Due</p>
+                                <p className="text-sm font-bold text-red-600">₹{(order.price - order.advancePayment).toLocaleString('en-IN')}</p>
+                            </div>
+                        </div>
+
+                        {/* Expanded Content (Visible when OPEN) */}
+                        <div className={`px-4 pb-4 transition-all duration-300 ${activeSection === 'summary' ? 'block opacity-100' : 'hidden opacity-0'}`}>
+                            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                                <div className="col-span-2">
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Garment Type</p>
+                                    <p className="text-sm font-semibold text-slate-800">
+                                        {order.orderItems && order.orderItems.length > 0
+                                            ? order.orderItems.map(item => item.garmentType).join(', ')
+                                            : order.orderType}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Due Date</p>
+                                    <p className="text-sm font-semibold text-slate-800">{formatDate(order.dueDate)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Created</p>
+                                    <p className="text-sm font-semibold text-slate-800">{formatDate(order.createdAt)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Amount</p>
+                                    <p className="text-sm font-semibold text-green-600">₹{order.price.toLocaleString('en-IN')}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Advance</p>
+                                    <p className="text-sm font-semibold text-slate-600">₹{order.advancePayment.toLocaleString('en-IN')}</p>
+                                </div>
+                                <div className="col-span-2 bg-red-50 rounded-lg p-2 border border-red-100 mt-1">
+                                    <div className="flex justify-between items-center">
+                                        <p className="text-[10px] text-red-500 uppercase tracking-wide font-bold">Balance Due</p>
+                                        <p className="text-base font-bold text-red-600">₹{(order.price - order.advancePayment).toLocaleString('en-IN')}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 2: CUSTOMER DETAILS (Mobile Accordion / Desktop Grid) */}
+
+                    {/* Desktop View (Unchanged) */}
+                    <div className="hidden md:block bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6 mb-6">
                         <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <span>👤</span>
+                            <svg className="w-5 h-5 md:w-6 md:h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
                             Customer Details
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -291,55 +408,183 @@ const OrderDetailsPage = () => {
                         </div>
                     </div>
 
-                    {/* SECTION 3: MEASUREMENTS (VERY IMPORTANT) */}
-                    <div className="bg-amber-50/80 backdrop-blur-xl border-2 border-dashed border-amber-300 rounded-3xl shadow-lg p-6 mb-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <span>📏</span>
-                                Customer Measurements
+                    {/* Mobile View (Accordion) */}
+                    <div className="md:hidden bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg mb-3 overflow-hidden transition-all duration-300">
+                        {/* Header */}
+                        <div
+                            onClick={() => setActiveSection(activeSection === 'customer' ? null : 'customer')}
+                            className="p-4 flex items-center justify-between cursor-pointer"
+                        >
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                Customer Details
                             </h2>
-                            {measurementsArray.length > 0 && (
-                                <button
-                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
-                                    onClick={() => alert('Edit measurements feature coming soon!')}
-                                >
-                                    ✏️ Edit Measurements
-                                </button>
-                            )}
+                            <svg
+                                className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${activeSection === 'customer' ? 'rotate-180' : ''}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
                         </div>
-                        {measurementsArray.length > 0 ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {measurementsArray.map(([key, value]) => (
-                                    <div key={key} className="bg-white rounded-lg p-4 border border-amber-200 shadow-sm">
-                                        <p className="text-xs text-amber-700 uppercase tracking-wide mb-1 font-medium">
+
+                        {/* Collapsed Preview (Visible when CLOSED) */}
+                        <div className={`px-4 pb-4 ${activeSection === 'customer' ? 'hidden' : 'block'}`}>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Name</p>
+                                    <p className="text-sm font-semibold text-slate-800 truncate">{order.customerName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Mobile</p>
+                                    <p className="text-sm font-semibold text-slate-800">{order.customerPhone}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Expanded Content (Visible when OPEN) */}
+                        <div className={`px-4 pb-4 transition-all duration-300 ${activeSection === 'customer' ? 'block opacity-100' : 'hidden opacity-0'}`}>
+                            <div className="space-y-3 border-t border-slate-100 pt-3">
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Customer Name</p>
+                                    <p className="text-sm font-semibold text-slate-800">{order.customerName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Mobile Number</p>
+                                    <p className="text-sm font-semibold text-slate-800">{order.customerPhone}</p>
+                                </div>
+                                {order.customerEmail && (
+                                    <div>
+                                        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Email</p>
+                                        <p className="text-sm font-semibold text-slate-800 break-all">{order.customerEmail}</p>
+                                    </div>
+                                )}
+                                {order.customerId && (
+                                    <div>
+                                        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Customer Username</p>
+                                        <p className="text-sm font-semibold text-slate-800">Linked Account</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECTION 3: MEASUREMENTS */}
+                    <div className="bg-amber-50/80 backdrop-blur-xl border-2 border-dashed border-amber-300 rounded-3xl shadow-lg p-4 mb-3 md:p-6 md:mb-6">
+                        <div className="flex items-center justify-between mb-3 md:mb-4">
+                            <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <svg className="w-5 h-5 md:w-6 md:h-6 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M2 12h20" /><path d="M6 12v-2" /><path d="M10 12v-4" /><path d="M14 12v-2" /><path d="M18 12v-4" />
+                                </svg>
+                                Measurements
+                            </h2>
+                            <button
+                                className="px-3 py-1.5 md:px-4 md:py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs md:text-sm font-medium rounded-lg transition-colors"
+                                onClick={() => alert('Edit measurements feature coming soon!')}
+                            >
+                                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Checking for new Order Items structure first */}
+                        {order.orderItems && order.orderItems.length > 0 ? (
+                            <div className="space-y-6">
+                                {order.orderItems.map((item, index) => {
+                                    const hasMeasurements = item.measurements && Object.keys(item.measurements).length > 0;
+                                    const hasExtraMeasurements = item.extraMeasurements && Object.keys(item.extraMeasurements).length > 0;
+
+                                    if (!hasMeasurements && !hasExtraMeasurements) return null;
+
+                                    return (
+                                        <div key={index} className="bg-white/50 rounded-xl p-3 md:p-4 border border-amber-100">
+                                            <div className="flex items-center gap-2 mb-3 border-b border-amber-200/50 pb-2">
+                                                <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded-full">Item {index + 1}</span>
+                                                <h3 className="font-bold text-slate-800 text-sm md:text-base">{item.garmentType}</h3>
+                                            </div>
+
+                                            {/* Standard Measurements */}
+                                            {hasMeasurements && (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 mb-3">
+                                                    {Object.entries(item.measurements).map(([key, value]) => (
+                                                        <div key={key} className="bg-white rounded-lg p-3 md:p-4 border border-amber-200 shadow-sm">
+                                                            <p className="text-[10px] md:text-xs text-amber-700 uppercase tracking-wide mb-0.5 md:mb-1 font-medium truncate">
+                                                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                            </p>
+                                                            <p className="text-lg md:text-xl font-bold text-slate-800">{value}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Extra Measurements */}
+                                            {hasExtraMeasurements && (
+                                                <div className="mt-3">
+                                                    <p className="text-xs font-semibold text-slate-500 mb-2">Extra Measurements</p>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                        {Object.entries(item.extraMeasurements).map(([key, value]) => (
+                                                            <div key={key} className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+                                                                <p className="text-[10px] text-slate-500 uppercase font-medium">{key}</p>
+                                                                <p className="text-sm font-bold text-slate-800">{value}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {item.notes && (
+                                                <div className="mt-3 text-xs md:text-sm text-slate-600 bg-amber-50 p-2 rounded border border-amber-100 italic">
+                                                    Note: {item.notes}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : order.measurements && Object.keys(order.measurements).length > 0 ? (
+                            // Legacy Measurements Support
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                                {Object.entries(order.measurements).map(([key, value]) => (
+                                    <div key={key} className="bg-white rounded-lg p-3 md:p-4 border border-amber-200 shadow-sm">
+                                        <p className="text-[10px] md:text-xs text-amber-700 uppercase tracking-wide mb-0.5 md:mb-1 font-medium truncate">
                                             {key.replace(/([A-Z])/g, ' $1').trim()}
                                         </p>
-                                        <p className="text-xl font-bold text-slate-800">{value}</p>
+                                        <p className="text-lg md:text-xl font-bold text-slate-800">{value}</p>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-12 text-slate-500">
-                                <p className="text-6xl mb-3">📏</p>
-                                <p className="text-lg font-medium">No measurements recorded</p>
-                                <p className="text-sm mt-2">Measurements were not captured for this order</p>
+                            <div className="text-center py-8 md:py-12 text-slate-500">
+                                <div className="mb-2 md:mb-3 flex justify-center text-slate-300">
+                                    <svg className="w-12 h-12 md:w-16 md:h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M2 12h20" /><path d="M6 12v-2" /><path d="M10 12v-4" /><path d="M14 12v-2" /><path d="M18 12v-4" />
+                                    </svg>
+                                </div>
+                                <p className="text-base md:text-lg font-medium">No measurements</p>
+                                <p className="text-xs md:text-sm mt-1">Measurements were not captured for this order</p>
                             </div>
                         )}
                     </div>
 
                     {/* SECTION 4: ORDER NOTES */}
-                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6 mb-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <span>📝</span>
-                                Order Notes
+                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-4 mb-3 md:p-6 md:mb-6">
+                        <div className="flex items-center justify-between mb-3 md:mb-4">
+                            <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <svg className="w-5 h-5 md:w-6 md:h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Notes
                             </h2>
                             {!editingNotes && (
                                 <button
                                     onClick={() => setEditingNotes(true)}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                    className="px-3 py-1.5 md:px-4 md:py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs md:text-sm font-medium rounded-lg transition-colors"
                                 >
-                                    ✏️ Edit Notes
+                                    <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
                                 </button>
                             )}
                         </div>
@@ -348,22 +593,22 @@ const OrderDetailsPage = () => {
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
-                                    className="w-full p-4 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 min-h-[120px] mb-3"
+                                    className="w-full p-3 md:p-4 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 min-h-[100px] md:min-h-[120px] mb-3 text-sm md:text-base"
                                     placeholder="Add notes about this order..."
                                 />
-                                <div className="flex gap-3">
+                                <div className="flex gap-2 md:gap-3">
                                     <button
                                         onClick={handleNotesUpdate}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+                                        className="flex-1 px-3 py-2 md:px-4 bg-green-600 hover:bg-green-700 text-white text-sm md:text-base font-medium rounded-lg transition-colors"
                                     >
-                                        Save Notes
+                                        Save
                                     </button>
                                     <button
                                         onClick={() => {
                                             setEditingNotes(false);
                                             setNotes(order.notes || '');
                                         }}
-                                        className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white font-medium rounded-lg transition-colors"
+                                        className="flex-1 px-3 py-2 md:px-4 bg-slate-400 hover:bg-slate-500 text-white text-sm md:text-base font-medium rounded-lg transition-colors"
                                     >
                                         Cancel
                                     </button>
@@ -372,38 +617,42 @@ const OrderDetailsPage = () => {
                         ) : (
                             <div className="text-slate-700">
                                 {order.notes ? (
-                                    <p className="text-base leading-relaxed">{order.notes}</p>
+                                    <p className="text-sm md:text-base leading-relaxed">{order.notes}</p>
                                 ) : (
-                                    <p className="text-slate-400 italic">No notes added yet</p>
+                                    <p className="text-xs md:text-base text-slate-400 italic">No notes added yet</p>
                                 )}
                             </div>
                         )}
                         {order.description && (
-                            <div className="mt-4 pt-4 border-t border-slate-200">
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Order Description</p>
-                                <p className="text-base text-slate-700">{order.description}</p>
+                            <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-slate-200">
+                                <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wide mb-0.5 md:mb-1">Order Description</p>
+                                <p className="text-sm md:text-base text-slate-700">{order.description}</p>
                             </div>
                         )}
                     </div>
 
                     {/* SECTION 5: ORDER ACTIONS */}
-                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-6">
-                        <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <span>⚡</span>
-                            Order Actions
+                    <div className="bg-white/60 backdrop-blur-xl border border-white/60 rounded-3xl shadow-lg p-4 md:p-6 mb-24 md:mb-0">
+                        <h2 className="text-lg md:text-xl font-bold text-slate-800 mb-3 md:mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5 md:w-6 md:h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Actions
                         </h2>
-                        <div className="flex flex-wrap gap-4">
+                        <div className="flex flex-col md:flex-row flex-wrap gap-3 md:gap-4">
                             {order.status === 'Order Created' && (
                                 <button
                                     onClick={() => handleStatusUpdate('Cutting Completed')}
                                     disabled={updatingStatus}
-                                    className="flex-1 min-w-[200px] px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full md:flex-1 md:min-w-[200px] px-4 py-3 md:px-6 md:py-4 bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-base font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {updatingStatus ? (
                                         <span>Updating...</span>
                                     ) : (
                                         <>
-                                            <span>✂️</span>
+                                            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                                            </svg>
                                             <span>Mark Cutting Done</span>
                                         </>
                                     )}
@@ -413,37 +662,112 @@ const OrderDetailsPage = () => {
                                 <button
                                     onClick={() => handleStatusUpdate('Order Completed')}
                                     disabled={updatingStatus}
-                                    className="flex-1 min-w-[200px] px-6 py-4 bg-green-600 hover:bg-green-700 text-white text-base font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full md:flex-1 md:min-w-[200px] px-4 py-3 md:px-6 md:py-4 bg-green-600 hover:bg-green-700 text-white text-sm md:text-base font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {updatingStatus ? (
                                         <span>Updating...</span>
                                     ) : (
                                         <>
-                                            <span>✅</span>
+                                            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
                                             <span>Mark Order Completed</span>
                                         </>
                                     )}
                                 </button>
                             )}
                             {order.status === 'Order Completed' && (
-                                <div className="flex-1 min-w-[200px] px-6 py-4 bg-green-50 border-2 border-green-300 text-green-700 text-base font-semibold rounded-lg flex items-center justify-center gap-2">
-                                    <span>✓</span>
-                                    <span>Order Completed</span>
+                                <div className="w-full md:flex-1 md:min-w-[200px] flex flex-col gap-3">
+                                    <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+                                        <p className="text-xs font-bold text-emerald-800 uppercase mb-2">Collect Payment</p>
+                                        <div className="flex gap-2 mb-2">
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] text-emerald-600 font-medium mb-1">Mode</label>
+                                                <select
+                                                    value={paymentMode}
+                                                    onChange={(e) => setPaymentMode(e.target.value)}
+                                                    className="w-full text-xs p-1.5 rounded border border-emerald-200 focus:outline-none focus:border-emerald-500"
+                                                >
+                                                    <option value="Cash">Cash</option>
+                                                    <option value="UPI">UPI</option>
+                                                    <option value="Card">Card</option>
+                                                    <option value="Online">Online</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] text-emerald-600 font-medium mb-1">Amount</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-2 top-1.5 text-xs text-slate-400">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        value={finalPaymentAmount}
+                                                        onChange={(e) => setFinalPaymentAmount(e.target.value)}
+                                                        className="w-full text-xs p-1.5 pl-5 rounded border border-emerald-200 focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleStatusUpdate('Delivered')}
+                                        disabled={updatingStatus}
+                                        className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {updatingStatus ? (
+                                            <span>Updating...</span>
+                                        ) : (
+                                            <>
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                                                </svg>
+                                                <span>Mark Payment & Delivered</span>
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
                             )}
-                            {order.cuttingCompletedAt && (
-                                <div className="flex-1 min-w-[200px] text-sm text-slate-600">
-                                    <p className="font-medium">Cutting completed at:</p>
-                                    <p>{formatDate(order.cuttingCompletedAt)}</p>
+                            {order.status === 'Delivered' && (
+                                <div className="w-full md:flex-1 md:min-w-[200px] px-4 py-3 md:px-6 md:py-4 bg-slate-100 border-2 border-slate-300 text-slate-700 text-sm md:text-base font-semibold rounded-lg flex items-center justify-center gap-2">
+                                    <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Order Delivered</span>
                                 </div>
                             )}
-                            {order.completedAt && (
-                                <div className="flex-1 min-w-[200px] text-sm text-slate-600">
-                                    <p className="font-medium">Order completed at:</p>
-                                    <p>{formatDate(order.completedAt)}</p>
-                                </div>
-                            )}
+                            <div className="flex flex-row justify-between md:flex-col md:justify-start gap-2 w-full md:w-auto">
+                                {order.cuttingCompletedAt && (
+                                    <div className="text-xs md:text-sm text-slate-600">
+                                        <p className="font-medium inline md:block mr-1">Cutting:</p>
+                                        <p className="inline md:block">{formatDate(order.cuttingCompletedAt)}</p>
+                                    </div>
+                                )}
+                                {order.completedAt && (
+                                    <div className="text-xs md:text-sm text-slate-600">
+                                        <p className="font-medium inline md:block mr-1">Completed:</p>
+                                        <p className="inline md:block">{formatDate(order.completedAt)}</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Cancel Order Option */}
+                        {order.status !== 'Order Completed' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                            <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-end">
+                                <button
+                                    onClick={() => {
+                                        if (window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
+                                            handleStatusUpdate('Cancelled');
+                                        }
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors opacity-80 hover:opacity-100"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Cancel Order
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

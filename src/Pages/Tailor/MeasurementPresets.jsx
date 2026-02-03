@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardSidebar from '../../components/Tailor/DashboardSidebar';
 import axios from 'axios';
@@ -22,6 +22,12 @@ const MeasurementPresets = () => {
             { label: '', unit: 'inches', required: false }
         ]
     });
+
+    const dragItem = useRef(null);
+    const dragOverItem = useRef(null);
+
+    // Generate unique ID for frontend-only keys
+    const generateId = () => Math.random().toString(36).substr(2, 9);
 
     // Get logged-in tailor data
     useEffect(() => {
@@ -75,7 +81,7 @@ const MeasurementPresets = () => {
     const handleAddField = () => {
         setFormData(prev => ({
             ...prev,
-            fields: [...prev.fields, { label: '', unit: 'inches', required: false }]
+            fields: [...prev.fields, { _id: generateId(), label: '', unit: 'inches', required: false }]
         }));
     };
 
@@ -100,7 +106,7 @@ const MeasurementPresets = () => {
         setFormData({
             name: '',
             description: '',
-            fields: [{ label: '', unit: 'inches', required: false }]
+            fields: [{ _id: generateId(), label: '', unit: 'inches', required: false }]
         });
         setShowCreateModal(true);
     };
@@ -110,7 +116,7 @@ const MeasurementPresets = () => {
         setFormData({
             name: preset.name,
             description: preset.description,
-            fields: preset.fields
+            fields: preset.fields.map(f => ({ ...f, _id: f._id || generateId() }))
         });
         setShowCreateModal(true);
         setShowActionSheet(false);
@@ -121,10 +127,75 @@ const MeasurementPresets = () => {
         setFormData({
             name: `${preset.name} (Copy)`,
             description: preset.description,
-            fields: preset.fields
+            fields: preset.fields.map(f => ({ ...f, _id: generateId(), label: f.label, unit: f.unit, required: f.required }))
         });
         setShowCreateModal(true);
         setShowActionSheet(false);
+    };
+
+    // --- Drag and Drop Handlers ---
+    const [activeDragIndex, setActiveDragIndex] = useState(null);
+
+    // Desktop Mouse Drag
+    const handleDragStart = (e, index) => {
+        dragItem.current = index;
+        setActiveDragIndex(index);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragEnter = (e, index) => {
+        const dragIndex = dragItem.current;
+        if (dragIndex === null || dragIndex === undefined || dragIndex === index) return;
+
+        const newFields = [...formData.fields];
+        const draggedItemContent = newFields[dragIndex];
+        newFields.splice(dragIndex, 1);
+        newFields.splice(index, 0, draggedItemContent);
+
+        dragItem.current = index;
+        setActiveDragIndex(index);
+        setFormData(prev => ({ ...prev, fields: newFields }));
+    };
+
+    const handleDragEnd = () => {
+        dragItem.current = null;
+        setActiveDragIndex(null);
+    };
+
+    // Mobile Touch Drag
+    const handleTouchStart = (index) => {
+        dragItem.current = index;
+        setActiveDragIndex(index);
+    };
+
+    const handleTouchMove = (e) => {
+        if (dragItem.current === null) return;
+        if (e.cancelable) e.preventDefault();
+
+        const touch = e.touches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        const row = element?.closest('[data-drag-row="true"]');
+
+        if (row) {
+            const targetIndex = parseInt(row.getAttribute('data-index'));
+            const dragIndex = dragItem.current;
+
+            if (!isNaN(targetIndex) && targetIndex !== dragIndex) {
+                const newFields = [...formData.fields];
+                const draggedItemContent = newFields[dragIndex];
+                newFields.splice(dragIndex, 1);
+                newFields.splice(targetIndex, 0, draggedItemContent);
+
+                dragItem.current = targetIndex;
+                setActiveDragIndex(targetIndex);
+                setFormData(prev => ({ ...prev, fields: newFields }));
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        dragItem.current = null;
+        setActiveDragIndex(null);
     };
 
     const handleSavePreset = async () => {
@@ -208,44 +279,39 @@ const MeasurementPresets = () => {
                 onUpdateTailorData={handleUpdateTailorData}
             />
 
-            <main className="flex-1 lg:ml-72 dashboard-main-mobile min-w-0 pb-24 lg:pb-8">
-                {/* Mobile Header */}
-                <div className="lg:hidden sticky top-14 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 z-10">
-                    <button
-                        onClick={() => navigate('/dashboard')}
-                        className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-lg active:bg-slate-200 transition-colors"
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </button>
-                    <h1 className="text-lg font-bold text-slate-900">Measurement Presets</h1>
-                </div>
+            <main className="flex-1 lg:ml-72 dashboard-main-mobile min-w-0 pb-32 lg:pb-8">
+                {/* Header Spacer for Mobile */}
+                <div className="lg:hidden h-4"></div>
 
-                {/* Desktop Header */}
-                <div className="hidden lg:block max-w-7xl mx-auto p-6 md:p-8">
-                    <header className="mb-8 flex items-center justify-between">
-                        <div>
-                            <div className="flex items-center gap-2 mb-2">
-                                <button
-                                    onClick={() => navigate('/dashboard')}
-                                    className="text-slate-600 hover:text-slate-900 transition-colors"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                    </svg>
-                                </button>
-                                <h1 className="text-3xl font-serif font-bold text-slate-800">Measurement Presets 📏</h1>
-                            </div>
-                            <p className="text-slate-500">Manage measurement templates for your garments</p>
+                {/* Main Content Area */}
+                <div className="max-w-7xl mx-auto px-4 md:px-8">
+                    <header className="mb-4 lg:mb-8">
+                        <div className="flex items-center gap-2 mb-1">
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="text-slate-600 hover:text-slate-900 transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
+                            <h1 className="text-2xl font-serif font-bold text-slate-800 flex items-center gap-2">
+                                Measurement Presets
+                                <span className="text-2xl">📏</span>
+                            </h1>
                         </div>
+                        <p className="text-slate-500 text-sm md:text-base">Manage measurement templates for your garments</p>
+                    </header>
+
+                    {/* Desktop Create Button (Hidden on Mobile as we have FAB) */}
+                    <div className="hidden lg:flex justify-end -mt-16 mb-8">
                         <button
                             onClick={handleOpenCreate}
                             className="px-6 py-3 bg-linear-to-r from-[#6b4423] to-[#8b5a3c] hover:from-[#573619] hover:to-[#6b4423] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
                         >
                             + Create Preset
                         </button>
-                    </header>
+                    </div>
                 </div>
 
                 {loading ? (
@@ -302,6 +368,8 @@ const MeasurementPresets = () => {
                                     </div>
                                 </button>
                             ))}
+                            {/* Explicit Spacer for Mobile Scrolling */}
+                            <div className="lg:hidden h-32 w-full"></div>
                         </div>
 
                         {/* Desktop: Card Grid (unchanged) */}
@@ -518,6 +586,7 @@ const MeasurementPresets = () => {
                                 </div>
 
                                 {/* Measurement Fields List */}
+                                {/* Measurement Fields List */}
                                 <div className="mt-2">
                                     <div className="px-5 mb-2 flex items-center justify-between">
                                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Measurement Fields</h3>
@@ -528,35 +597,60 @@ const MeasurementPresets = () => {
                                         {formData.fields.map((field, index) => {
                                             const isExpanded = selectedPreset?.expandedIndex === index;
                                             return (
-                                                <div key={index} className="border-b border-slate-50 last:border-0">
-                                                    {/* Compact Row */}
-                                                    <button
-                                                        onClick={() => setSelectedPreset(prev => ({ ...prev, expandedIndex: isExpanded ? -1 : index }))}
-                                                        className="w-full px-5 py-4 flex items-center justify-between active:bg-slate-50 transition-colors"
-                                                    >
-                                                        <div className="flex items-center gap-3 overflow-hidden">
-                                                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
-                                                                <span className="text-xs font-bold text-slate-500">{index + 1}</span>
-                                                            </div>
-                                                            <div className="text-left overflow-hidden">
-                                                                <p className="text-sm font-bold text-slate-800 truncate">
-                                                                    {field.label || <span className="text-slate-300 italic">Untitled Field</span>}
-                                                                </p>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <span className="text-[10px] text-slate-400 uppercase font-medium">{field.unit}</span>
-                                                                    {field.required && (
-                                                                        <span className="w-1 h-1 bg-amber-400 rounded-full"></span>
-                                                                    )}
-                                                                    {field.required && (
-                                                                        <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tighter">Required</span>
-                                                                    )}
+                                                <div
+                                                    key={field._id || index}
+                                                    className={`border-b border-slate-50 last:border-0 transition-all ${activeDragIndex === index ? 'bg-amber-50' : ''}`}
+                                                    draggable={true}
+                                                    onDragStart={(e) => handleDragStart(e, index)}
+                                                    onDragEnter={(e) => handleDragEnter(e, index)}
+                                                    onDragEnd={handleDragEnd}
+                                                    onDragOver={(e) => e.preventDefault()}
+                                                    data-drag-row="true"
+                                                    data-index={index}
+                                                >
+                                                    {/* Row Container */}
+                                                    <div className="flex w-full items-center">
+                                                        {/* Drag Handle - Touch Target */}
+                                                        <div
+                                                            className="w-12 h-16 flex items-center justify-center text-slate-300 cursor-grab active:cursor-grabbing touch-none"
+                                                            onTouchStart={(e) => { e.stopPropagation(); handleTouchStart(index); }}
+                                                            onTouchMove={handleTouchMove}
+                                                            onTouchEnd={handleTouchEnd}
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                                            </svg>
+                                                        </div>
+
+                                                        {/* Main Content Button */}
+                                                        <button
+                                                            onClick={() => setSelectedPreset(prev => ({ ...prev, expandedIndex: isExpanded ? -1 : index }))}
+                                                            className="flex-1 pr-5 py-4 flex items-center justify-between active:bg-slate-50 transition-colors bg-transparent border-none appearance-none cursor-pointer"
+                                                        >
+                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                                                                    <span className="text-xs font-bold text-slate-500">{index + 1}</span>
+                                                                </div>
+                                                                <div className="text-left overflow-hidden">
+                                                                    <p className="text-sm font-bold text-slate-800 truncate">
+                                                                        {field.label || <span className="text-slate-300 italic">Untitled Field</span>}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="text-[10px] text-slate-400 uppercase font-medium">{field.unit}</span>
+                                                                        {field.required && (
+                                                                            <span className="w-1 h-1 bg-amber-400 rounded-full"></span>
+                                                                        )}
+                                                                        {field.required && (
+                                                                            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tighter">Required</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                        <svg className={`w-5 h-5 text-slate-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </button>
+                                                            <svg className={`w-5 h-5 text-slate-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
 
                                                     {/* Inline Editor (Expanded) */}
                                                     {isExpanded && (
@@ -594,6 +688,37 @@ const MeasurementPresets = () => {
                                                                     />
                                                                 </div>
                                                             </div>
+
+                                                            {/* Mobile Reorder Buttons */}
+                                                            <div className="grid grid-cols-2 gap-3 lg:hidden">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (index === 0) return;
+                                                                        const newFields = [...formData.fields];
+                                                                        [newFields[index], newFields[index - 1]] = [newFields[index - 1], newFields[index]];
+                                                                        setFormData(prev => ({ ...prev, fields: newFields }));
+                                                                        setSelectedPreset(prev => ({ ...prev, expandedIndex: index - 1 }));
+                                                                    }}
+                                                                    disabled={index === 0}
+                                                                    className="py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 disabled:opacity-50"
+                                                                >
+                                                                    Move Up ↑
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (index === formData.fields.length - 1) return;
+                                                                        const newFields = [...formData.fields];
+                                                                        [newFields[index], newFields[index + 1]] = [newFields[index + 1], newFields[index]];
+                                                                        setFormData(prev => ({ ...prev, fields: newFields }));
+                                                                        setSelectedPreset(prev => ({ ...prev, expandedIndex: index + 1 }));
+                                                                    }}
+                                                                    disabled={index === formData.fields.length - 1}
+                                                                    className="py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 disabled:opacity-50"
+                                                                >
+                                                                    Move Down ↓
+                                                                </button>
+                                                            </div>
+
                                                             <button
                                                                 onClick={() => handleRemoveField(index)}
                                                                 className="w-full py-3 text-red-600 text-xs font-bold uppercase tracking-widest border border-red-100 rounded-xl active:bg-red-50 transition-colors"
@@ -607,6 +732,7 @@ const MeasurementPresets = () => {
                                         })}
                                     </div>
                                 </div>
+
 
                                 {/* Danger Zone */}
                                 {editingPreset && !editingPreset.isDefault && (

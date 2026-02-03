@@ -59,7 +59,15 @@ const userSchema = mongoose.Schema({
         type: String,
         enum: ['customer'],
         default: 'customer'
-    }
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    verificationToken: String,
+    verificationTokenExpire: Date
 }, {
     timestamps: true
 });

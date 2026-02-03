@@ -117,6 +117,26 @@ const orderSchema = new mongoose.Schema({
     completedAt: {
         type: Date,
         required: false
+    },
+    deliveredAt: {
+        type: Date,
+        required: false
+    },
+    finalPaymentAmount: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    paymentMode: {
+        type: String,
+        required: false,
+        enum: ['Cash', 'UPI', 'Card', 'Online', 'Other'],
+        default: 'Cash'
+    },
+    isPaid: {
+        type: Boolean,
+        required: false,
+        default: false
     }
 }, {
     timestamps: true

@@ -19,6 +19,16 @@ const TailorDetailPage = () => {
     const [reviewText, setReviewText] = useState('');
     const [reviewSubmitting, setReviewSubmitting] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [editingReviewId, setEditingReviewId] = useState(null);
+    const [menuOpenReviewId, setMenuOpenReviewId] = useState(null);
+    const [showAllReviews, setShowAllReviews] = useState(false);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setMenuOpenReviewId(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         const fetchTailor = async () => {
@@ -107,18 +117,94 @@ const TailorDetailPage = () => {
         return stars;
     };
 
+    // Helper to get authenticated user consistently
+    const getAuthenticatedUser = () => {
+        try {
+            const userInfoStr = localStorage.getItem('userInfo');
+            return userInfoStr ? JSON.parse(userInfoStr) : null;
+        } catch (error) {
+            console.error('Error parsing auth user:', error);
+            return null;
+        }
+    };
+
     const checkAuth = () => {
-        const userInfo = localStorage.getItem('userInfo');
-        if (!userInfo) {
+        const user = getAuthenticatedUser();
+        if (!user) {
             setShowLoginModal(true);
             return false;
         }
         return true;
     };
 
-    const handleSubmitReview = async () => {
-        if (!checkAuth()) return;
+    const handleEditReview = (review) => {
+        setReviewText(review.comment);
+        setRatingInput(review.rating);
+        setEditingReviewId(review._id);
+        const form = document.getElementById('review-form');
+        if (form) form.scrollIntoView({ behavior: 'smooth' });
+    };
 
+    const handleDeleteReview = async (reviewId) => {
+        if (!window.confirm('Are you sure you want to delete this review?')) return;
+
+        const user = getAuthenticatedUser();
+        if (!user) return;
+
+        try {
+            const response = await fetch(`${API_URL}/api/tailors/${id}/reviews/${reviewId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${user.token}` // Assuming token might be needed, though simplistic auth usually relies on backend session or checking user ID in body/params if no token. Let's send user ID in body just in case if pure REST isn't fully set up, or standard headers. Given "userInfo" structure usually has tokens.
+                },
+                body: JSON.stringify({ userId: user._id }) // Passing userId for backend verification if needed
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || 'Failed to delete review');
+            }
+
+            // Update state
+            setTailor(prev => ({
+                ...prev,
+                reviews: prev.reviews.filter(r => r._id !== reviewId),
+                totalReviews: Math.max(0, (prev.totalReviews || 1) - 1)
+                // Note: Recalculating average rating accurately requires re-fetching or complex math removing the specific weight. 
+                // For simplicity/safety, we will just re-fetch the tailor details silently or accept a slight drift until refresh.
+                // Or better:
+            }));
+
+            // Re-fetch to ensure rating calculations are perfect
+            const refetchResponse = await fetch(`${API_URL}/api/tailors/${id}`);
+            if (refetchResponse.ok) {
+                const updatedData = await refetchResponse.json();
+                setTailor(updatedData);
+            }
+
+            alert('Review deleted successfully');
+        } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    const handleSubmitReview = async () => {
+        const user = getAuthenticatedUser();
+
+        // 1. Auth check
+        if (!user) {
+            setShowLoginModal(true);
+            return;
+        }
+
+        // 2. Role validation
+        if (user.role !== 'customer') {
+            alert('Only customers can submit reviews.');
+            return;
+        }
+
+        // 3. Form validation
         if (ratingInput === 0) {
             alert('Please select a rating');
             return;
@@ -130,10 +216,15 @@ const TailorDetailPage = () => {
 
         try {
             setReviewSubmitting(true);
-            const user = JSON.parse(userInfo);
 
-            const response = await fetch(`${API_URL}/api/tailors/${id}/reviews`, {
-                method: 'POST',
+            const url = editingReviewId
+                ? `${API_URL}/api/tailors/${id}/reviews/${editingReviewId}`
+                : `${API_URL}/api/tailors/${id}/reviews`;
+
+            const method = editingReviewId ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -141,30 +232,41 @@ const TailorDetailPage = () => {
                     customerId: user._id,
                     customerName: user.name,
                     rating: ratingInput,
-                    comment: reviewText
+                    comment: reviewText,
+                    userId: user._id // Ensure ownership check on backend
                 }),
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || 'Failed to submit review');
+                throw new Error(data.message || `Failed to ${editingReviewId ? 'update' : 'submit'} review`);
             }
 
-            // Update local state with new review
-            setTailor(prev => ({
-                ...prev,
-                reviews: [data, ...(prev.reviews || [])],
-                rating: (prev.rating * (prev.totalReviews || 0) + ratingInput) / ((prev.totalReviews || 0) + 1), // Approx update or just refetch. 
-                // Actually backend returns new review, but we need fresh average from backend or calculate it locally.
-                // Let's just refetch tailor to get correct average is safest, or trust backend calc logic I wrote in Step 2.
-                // But simplified approx:
-                totalReviews: (prev.totalReviews || 0) + 1
-            }));
+            // Re-fetch tailor data to get updated averages and lists cleanly
+            const refetchResponse = await fetch(`${API_URL}/api/tailors/${id}`);
+            if (refetchResponse.ok) {
+                const updatedData = await refetchResponse.json();
+                setTailor(updatedData);
+            } else {
+                // Fallback optimistic update if fetch fails
+                setTailor(prev => {
+                    const updatedReviews = editingReviewId
+                        ? prev.reviews.map(r => r._id === editingReviewId ? data : r)
+                        : [data, ...(prev.reviews || [])];
+
+                    return {
+                        ...prev,
+                        reviews: updatedReviews,
+                        totalReviews: editingReviewId ? prev.totalReviews : (prev.totalReviews || 0) + 1
+                    };
+                });
+            }
 
             setRatingInput(0);
             setReviewText('');
-            alert('Review submitted successfully!');
+            setEditingReviewId(null);
+            alert(`Review ${editingReviewId ? 'updated' : 'submitted'} successfully!`);
         } catch (error) {
             alert(error.message);
         } finally {
@@ -406,7 +508,7 @@ const TailorDetailPage = () => {
                                                 className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative"
                                             >
                                                 <img
-                                                    src={item.image || item}
+                                                    src={item.images?.[0] || item.image || item}
                                                     alt={item.title || `Portfolio ${idx + 1}`}
                                                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 />
@@ -439,7 +541,7 @@ const TailorDetailPage = () => {
                             </div>
 
                             {/* 1) Add Review Input */}
-                            <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
+                            <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100" id="review-form">
                                 <textarea
                                     value={reviewText}
                                     onChange={(e) => setReviewText(e.target.value)}
@@ -464,21 +566,35 @@ const TailorDetailPage = () => {
                                             </svg>
                                         ))}
                                     </div>
-                                    <button
-                                        onClick={handleSubmitReview}
-                                        disabled={reviewSubmitting}
-                                        className={`px-4 py-1.5 bg-[#6b4423] text-white text-sm font-medium rounded-lg hover:bg-[#573619] transition-colors ${reviewSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    >
-                                        {reviewSubmitting ? 'Posting...' : 'Post Review'}
-                                    </button>
+                                    <div className="flex gap-2">
+                                        {editingReviewId && (
+                                            <button
+                                                onClick={() => {
+                                                    setEditingReviewId(null);
+                                                    setRatingInput(0);
+                                                    setReviewText('');
+                                                }}
+                                                className="px-4 py-1.5 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={handleSubmitReview}
+                                            disabled={reviewSubmitting}
+                                            className={`px-4 py-1.5 bg-[#6b4423] text-white text-sm font-medium rounded-lg hover:bg-[#573619] transition-colors ${reviewSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        >
+                                            {reviewSubmitting ? 'Processing...' : (editingReviewId ? 'Update Review' : 'Post Review')}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
                             {/* 2 & 3) Horizontal Scroll (Mobile) / Grid (Desktop) */}
-                            <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 -mx-4 px-4 md:grid md:grid-cols-2 md:gap-6 md:pb-0 md:mx-0 md:px-0 scrollbar-hide">
+                            <div className={`gap-4 ${showAllReviews ? 'grid grid-cols-1 md:grid-cols-2' : 'flex overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:grid md:grid-cols-2 md:gap-6 md:pb-0 md:mx-0 md:px-0 scrollbar-hide'}`}>
                                 {tailor.reviews && tailor.reviews.length > 0 ? (
-                                    tailor.reviews.slice(0, 6).map((review, idx) => (
-                                        <div key={idx} className="min-w-[85vw] md:min-w-0 snap-center border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex flex-col h-full hover:border-[#6b4423] transition-colors">
+                                    tailor.reviews.slice(0, showAllReviews ? tailor.reviews.length : 6).map((review, idx) => (
+                                        <div key={idx} className={`${!showAllReviews ? 'min-w-[85vw] md:min-w-0 snap-center' : ''} border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex flex-col h-full hover:border-[#6b4423] transition-colors relative group`}>
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-[#6b4423] text-white flex items-center justify-center font-bold text-sm">
@@ -495,7 +611,52 @@ const TailorDetailPage = () => {
                                                     {review.date ? new Date(review.date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : ''}
                                                 </span>
                                             </div>
-                                            <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 md:line-clamp-none">"{review.comment}"</p>
+                                            <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 md:line-clamp-none mb-2">"{review.comment}"</p>
+
+                                            {/* Edit/Delete Actions for Own Reviews - Top Right Menu */}
+                                            {getAuthenticatedUser() && review.customerId === getAuthenticatedUser()?._id && (
+                                                <div className="absolute top-4 right-4">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setMenuOpenReviewId(menuOpenReviewId === review._id ? null : review._id);
+                                                        }}
+                                                        className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                                        </svg>
+                                                    </button>
+
+                                                    {/* Dropdown Menu */}
+                                                    {menuOpenReviewId === review._id && (
+                                                        <div className="absolute right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-100 z-10 p-1.5 flex gap-1 animation-fade-in-fast min-w-[80px] justify-center">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEditReview(review);
+                                                                    setMenuOpenReviewId(null);
+                                                                }}
+                                                                className="p-2 text-gray-500 hover:bg-gray-100 hover:text-[#6b4423] rounded-md transition-colors"
+                                                                title="Edit"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteReview(review._id);
+                                                                    setMenuOpenReviewId(null);
+                                                                }}
+                                                                className="p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-md transition-colors"
+                                                                title="Delete"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 ) : (
@@ -504,9 +665,12 @@ const TailorDetailPage = () => {
                             </div>
 
                             {/* 4) View All Reviews Button */}
-                            {tailor.reviews && tailor.reviews.length > 0 && (
-                                <button className="w-full mt-2 py-3 border border-gray-300 rounded-xl text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors">
-                                    Show all {tailor.reviews.length} reviews
+                            {tailor.reviews && tailor.reviews.length > 6 && (
+                                <button
+                                    onClick={() => setShowAllReviews(!showAllReviews)}
+                                    className="w-full mt-2 py-3 border border-gray-300 rounded-xl text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors"
+                                >
+                                    {showAllReviews ? 'Show fewer reviews' : `Show all ${tailor.reviews.length} reviews`}
                                 </button>
                             )}
                         </section>
@@ -515,15 +679,45 @@ const TailorDetailPage = () => {
 
                         {/* Location */}
                         <section id="location">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Location</h2>
-                            <div className="flex items-start gap-3 text-slate-700">
-                                <svg className="w-5 h-5 text-[#6b4423] mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                <div>
-                                    <div>{tailor.address?.street}</div>
-                                    <div>{tailor.address?.city}, {tailor.address?.state} {tailor.address?.pincode}</div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-2xl font-bold text-gray-900">Location</h2>
+                                {tailor.location?.locationSet && (
+                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                        Verified Location
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shrink-0 shadow-sm text-[#6b4423]">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-gray-900 mb-1">Shop Address</h3>
+                                        <p className="text-slate-600 mb-4 text-sm leading-relaxed">
+                                            {tailor.address?.street}<br />
+                                            {tailor.address?.city}, {tailor.address?.state} {tailor.address?.pincode}
+                                        </p>
+
+                                        <a
+                                            href={tailor.location?.locationSet && tailor.location?.latitude
+                                                ? `https://www.google.com/maps/search/?api=1&query=${tailor.location.latitude},${tailor.location.longitude}`
+                                                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([tailor.shopName, tailor.address?.street, tailor.address?.city, tailor.address?.state].filter(Boolean).join(', '))}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#6b4423] hover:border-[#6b4423] transition-all group"
+                                        >
+                                            <span>{tailor.location?.locationSet ? 'View Pinned Location' : 'Open in Maps'}</span>
+                                            <svg className="w-4 h-4 text-slate-400 group-hover:text-[#6b4423]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </section>

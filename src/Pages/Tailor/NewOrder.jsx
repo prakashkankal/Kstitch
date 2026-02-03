@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardSidebar from '../../components/Tailor/DashboardSidebar';
 import axios from 'axios';
@@ -11,6 +11,16 @@ const NewOrder = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+
+    // Customer Autocomplete State
+    const [previousCustomers, setPreviousCustomers] = useState([]);
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const suggestionRef = useRef(null);
+
+    // Measurement Autofill State
+    const [pastOrders, setPastOrders] = useState([]);
+    const [autofillAvailable, setAutofillAvailable] = useState({}); // { itemIndex: { available: boolean, measurements: object, presetId: string } }
 
     // Customer and general order info
     const [customerInfo, setCustomerInfo] = useState({
@@ -55,12 +65,50 @@ const NewOrder = () => {
         }
     }, [navigate]);
 
-    // Fetch presets when tailor data is available
+    // Fetch presets and customers when tailor data is available
     useEffect(() => {
         if (tailorData) {
             fetchPresets();
+            fetchPreviousCustomers();
+            loadDraft();
         }
     }, [tailorData]);
+
+    // Close suggestions on click outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (suggestionRef.current && !suggestionRef.current.contains(event.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Save draft whenever state changes
+    useEffect(() => {
+        if (tailorData) {
+            const draftData = {
+                customerInfo,
+                orderItems,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem(`draft_order_${tailorData._id}`, JSON.stringify(draftData));
+        }
+    }, [customerInfo, orderItems, tailorData]);
+
+    const loadDraft = () => {
+        try {
+            const savedDraft = localStorage.getItem(`draft_order_${tailorData._id}`);
+            if (savedDraft) {
+                const parsedDraft = JSON.parse(savedDraft);
+                if (parsedDraft.customerInfo) setCustomerInfo(parsedDraft.customerInfo);
+                if (parsedDraft.orderItems) setOrderItems(parsedDraft.orderItems);
+            }
+        } catch (error) {
+            console.error("Error loading draft:", error);
+        }
+    };
 
     const fetchPresets = async () => {
         try {
@@ -69,6 +117,67 @@ const NewOrder = () => {
         } catch (error) {
             console.error('Error fetching presets:', error);
         }
+    };
+
+    const fetchPreviousCustomers = async () => {
+        try {
+            const { data } = await axios.get(`${API_URL}/api/orders/customers/${tailorData._id}`);
+            setPreviousCustomers(data || []);
+        } catch (error) {
+            console.error('Error fetching customers:', error);
+        }
+    };
+
+    // Silently fetch customer history for autofill
+    const fetchCustomerHistory = async (phone) => {
+        if (!phone) return;
+        try {
+            // Use the new filter we added to get all orders for this customer phone
+            const { data } = await axios.get(`${API_URL}/api/orders/${tailorData._id}?customerPhone=${encodeURIComponent(phone)}&limit=50`);
+            setPastOrders(data.orders || []);
+        } catch (error) {
+            console.error('Error fetching history:', error);
+        }
+    };
+
+    // Check availability whenever items or pastOrders change
+    useEffect(() => {
+        if (pastOrders.length > 0) {
+            const newAvailability = {};
+            orderItems.forEach((item, index) => {
+                const match = findMatchingMeasurements(item.garmentType);
+                if (match) {
+                    newAvailability[index] = match;
+                }
+            });
+            setAutofillAvailable(newAvailability);
+        }
+    }, [orderItems, pastOrders]);
+
+    const findMatchingMeasurements = (currentType) => {
+        if (!currentType) return null;
+        const normalizedType = currentType.toLowerCase().trim();
+
+        // Find most recent order with matching type
+        for (const order of pastOrders) {
+            // Check legacy structure
+            if (order.orderType && order.orderType.toLowerCase().includes(normalizedType)) {
+                if (order.measurements && Object.keys(order.measurements).length > 0) {
+                    return { measurements: order.measurements, source: `Order #${order._id.slice(-4)}` };
+                }
+            }
+            // Check multi-item structure
+            if (order.orderItems && Array.isArray(order.orderItems)) {
+                const matchingItem = order.orderItems.find(i =>
+                    i.garmentType && i.garmentType.toLowerCase().includes(normalizedType) &&
+                    i.measurements && Object.keys(i.measurements).length > 0
+                );
+                if (matchingItem) {
+                    return { measurements: matchingItem.measurements, source: `Order #${order._id.slice(-4)}`, presetId: matchingItem.measurementPresetId };
+                }
+            }
+        }
+        return null;
     };
 
     const handleLogout = () => {
@@ -82,11 +191,59 @@ const NewOrder = () => {
 
     const handleCustomerInfoChange = (e) => {
         const { name, value } = e.target;
+        setCustomerInfo(prev => ({ ...prev, [name]: value }));
+        setError('');
+
+        if (name === 'customerName') {
+            if (value.length > 0) {
+                const filtered = previousCustomers.filter(c =>
+                    c.name.toLowerCase().includes(value.toLowerCase())
+                );
+                setSuggestions(filtered);
+                setShowSuggestions(true);
+            } else {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }
+    };
+
+    const handleSuggestionClick = (customer) => {
         setCustomerInfo(prev => ({
             ...prev,
-            [name]: value
+            customerName: customer.name,
+            customerPhone: customer.phone || prev.customerPhone,
+            customerEmail: customer.email || prev.customerEmail
         }));
-        setError('');
+        setShowSuggestions(false);
+        // Trigger history fetch for measurements
+        fetchCustomerHistory(customer.phone);
+    };
+
+    const handleAutofillMeasurements = (index) => {
+        const data = autofillAvailable[index];
+        if (!data) return;
+
+        setOrderItems(prev => prev.map((item, i) => {
+            if (i !== index) return item;
+
+            // If preset ID matches one of our current presets, use it to ensure labels match
+            // Otherwise just fill raw measurements
+            let presetId = item.selectedPresetId;
+            if (!presetId && data.presetId) {
+                const presetExists = presets.find(p => p._id === data.presetId);
+                if (presetExists) presetId = data.presetId;
+            }
+
+            return {
+                ...item,
+                selectedPresetId: presetId || item.selectedPresetId,
+                measurements: { ...item.measurements, ...data.measurements }
+            };
+        }));
+
+        // Clear availability to prevent re-clicking confuses user? optional. 
+        // Keeping it allows re-fill if they mess up.
     };
 
     const handleAddItem = () => {
@@ -234,6 +391,9 @@ const NewOrder = () => {
             console.log('Order created:', response.data);
             setSuccess('Order created successfully!');
 
+            // Clear draft
+            localStorage.removeItem(`draft_order_${tailorData._id}`);
+
             // Reset form
             setTimeout(() => {
                 navigate('/dashboard');
@@ -263,10 +423,10 @@ const NewOrder = () => {
                 onUpdateTailorData={handleUpdateTailorData}
             />
 
-            <main className="flex-1 lg:ml-72 p-6 md:p-8 dashboard-main-mobile">
+            <main className="flex-1 lg:ml-72 p-6 md:p-8 pb-32 md:pb-8 dashboard-main-mobile">
                 <div className="max-w-7xl mx-auto">
                     <header className="mb-8">
-                        <div className="flex items-center gap-2 mb-4">
+                        <div className="flex items-center gap-2 mb-1">
                             <button
                                 onClick={() => navigate('/dashboard')}
                                 className="text-slate-600 hover:text-slate-900 transition-colors"
@@ -275,9 +435,9 @@ const NewOrder = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-3xl font-serif font-bold text-slate-800 flex items-center gap-2">
+                            <h1 className="text-2xl font-serif font-bold text-slate-800 flex items-center gap-2">
                                 New Order
-                                <svg className="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </h1>
                         </div>
                         <p className="text-slate-500">Create a new order with one or more garments</p>
@@ -300,7 +460,7 @@ const NewOrder = () => {
                         <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6 mb-6">
                             <h2 className="text-xl font-bold text-slate-800 mb-4">Customer Information</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
+                                <div className="relative" ref={suggestionRef}>
                                     <label htmlFor="customerName" className="block text-sm font-medium text-slate-700 mb-2">
                                         Customer Name <span className="text-red-500">*</span>
                                     </label>
@@ -310,10 +470,27 @@ const NewOrder = () => {
                                         name="customerName"
                                         value={customerInfo.customerName}
                                         onChange={handleCustomerInfoChange}
+                                        onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                                         required
+                                        autoComplete="off"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423] focus:border-transparent"
                                         placeholder="Enter customer name"
                                     />
+                                    {/* Suggestions Dropdown */}
+                                    {showSuggestions && suggestions.length > 0 && (
+                                        <ul className="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                                            {suggestions.map((customer, index) => (
+                                                <li
+                                                    key={index}
+                                                    onClick={() => handleSuggestionClick(customer)}
+                                                    className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-100 last:border-0"
+                                                >
+                                                    <div className="font-bold">{customer.name}</div>
+                                                    <div className="text-xs text-slate-500">{customer.phone}</div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </div>
                                 <div>
                                     <label htmlFor="customerPhone" className="block text-sm font-medium text-slate-700 mb-2">
@@ -326,6 +503,7 @@ const NewOrder = () => {
                                         value={customerInfo.customerPhone}
                                         onChange={handleCustomerInfoChange}
                                         required
+                                        autoComplete="off"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423] focus:border-transparent"
                                         placeholder="10-digit mobile number"
                                     />
@@ -340,6 +518,7 @@ const NewOrder = () => {
                                         name="customerEmail"
                                         value={customerInfo.customerEmail}
                                         onChange={handleCustomerInfoChange}
+                                        autoComplete="off"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423] focus:border-transparent"
                                         placeholder="customer@email.com"
                                     />
@@ -366,9 +545,10 @@ const NewOrder = () => {
                         <div className="space-y-6 mb-6">
                             {orderItems.map((item, itemIndex) => {
                                 const selectedPreset = presets.find(p => p._id === item.selectedPresetId);
+                                const currentAutofill = autofillAvailable[itemIndex];
 
                                 return (
-                                    <div key={itemIndex} className="bg-linear-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6">
+                                    <div key={itemIndex} className="bg-linear-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6 transition-all duration-300">
                                         <div className="flex items-center justify-between mb-4">
                                             <h3 className="text-lg font-bold text-slate-800">
                                                 Item #{itemIndex + 1}
@@ -390,14 +570,28 @@ const NewOrder = () => {
                                                 <label className="block text-sm font-medium text-slate-700 mb-2">
                                                     Garment Type <span className="text-red-500">*</span>
                                                 </label>
-                                                <input
-                                                    type="text"
-                                                    value={item.garmentType}
-                                                    onChange={(e) => handleItemChange(itemIndex, 'garmentType', e.target.value)}
-                                                    required
-                                                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423]"
-                                                    placeholder="e.g., Shirt, Pant"
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={item.garmentType}
+                                                        onChange={(e) => handleItemChange(itemIndex, 'garmentType', e.target.value)}
+                                                        required
+                                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423]"
+                                                        placeholder="e.g., Shirt, Pant"
+                                                    />
+                                                    {/* Autofill CTA */}
+                                                    {currentAutofill && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleAutofillMeasurements(itemIndex)}
+                                                            className="absolute right-2 top-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-200 transition-colors flex items-center gap-1"
+                                                            title="Use measurements from previous order"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                            Autofill from {currentAutofill.source}?
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -425,6 +619,7 @@ const NewOrder = () => {
                                                     step="0.01"
                                                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423]"
                                                     placeholder="Enter price"
+                                                    onWheel={(e) => e.target.blur()} // Prevent scroll change
                                                 />
                                             </div>
                                             <div>
@@ -561,6 +756,7 @@ const NewOrder = () => {
                                         step="0.01"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423]"
                                         placeholder="Optional"
+                                        onWheel={(e) => e.target.blur()} // Prevent scroll change
                                     />
                                 </div>
                                 <div>
@@ -587,21 +783,24 @@ const NewOrder = () => {
                             </div>
                         </div>
 
+                        {/* Mobile Spacer to prevent content from being hidden behind fixed buttons */}
+                        <div className="h-44 md:hidden"></div>
+
                         {/* Submit Buttons */}
-                        <div className="flex gap-4 justify-end">
+                        <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t border-gray-200 z-30 flex gap-3 md:static md:bg-transparent md:border-0 md:p-0 md:justify-end">
                             <button
                                 type="button"
                                 onClick={() => navigate('/dashboard')}
-                                className="px-8 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl transition-colors"
+                                className="flex-1 md:flex-none px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl transition-colors order-1 md:order-none"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="px-8 py-3 bg-linear-to-r from-[#6b4423] to-[#8b5a3c] hover:from-[#573619] hover:to-[#6b4423] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 md:flex-none px-6 py-3 bg-linear-to-r from-[#6b4423] to-[#8b5a3c] hover:from-[#573619] hover:to-[#6b4423] text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed order-2 md:order-none"
                             >
-                                {loading ? 'Creating Order...' : 'Create Order'}
+                                {loading ? 'Creating...' : 'Create Order'}
                             </button>
                         </div>
                     </form>

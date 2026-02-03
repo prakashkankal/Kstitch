@@ -7,8 +7,28 @@ const TailorCustomers = () => {
     const navigate = useNavigate();
     const [tailorData, setTailorData] = useState(null);
     const [customers, setCustomers] = useState([]);
+    const [filteredCustomers, setFilteredCustomers] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // Filter customers based on search query
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!searchQuery) {
+                setFilteredCustomers(customers);
+            } else {
+                const lowerQuery = searchQuery.toLowerCase();
+                const filtered = customers.filter(customer =>
+                    customer.name.toLowerCase().includes(lowerQuery) ||
+                    (customer.orders && customer.orders.toString().includes(lowerQuery)) // simplistic assumption for order ID match if available in object
+                );
+                setFilteredCustomers(filtered);
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [searchQuery, customers]);
 
     useEffect(() => {
         const userInfo = localStorage.getItem('userInfo');
@@ -111,6 +131,7 @@ const TailorCustomers = () => {
     }
 
     return (
+
         <div className="w-full min-h-screen flex bg-[#f5f5f0] text-slate-900 overflow-x-hidden">
             {/* Sidebar with Profile Modal */}
             <DashboardSidebar
@@ -122,6 +143,7 @@ const TailorCustomers = () => {
             {/* Main Content */}
             <main className="flex-1 lg:ml-72 p-3 md:p-6 lg:p-8 dashboard-main-mobile min-w-0">
                 <header className="mb-6 md:mb-8">
+
                     <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-800 mb-1 md:mb-2">Customers</h1>
                     <p className="text-sm md:text-base text-slate-500">Manage your customer relationships</p>
                 </header>
@@ -151,6 +173,33 @@ const TailorCustomers = () => {
                     </div>
                 </div>
 
+                {/* Search Bar */}
+                <div className="mb-6 relative md:w-96 md:ml-auto">
+                    <input
+                        type="text"
+                        placeholder="Search by customer name or order ID..."
+                        className="block w-full pl-4 pr-12 py-3 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#6b4423]/20 focus:border-[#6b4423] transition-all sm:text-sm shadow-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
+                        {searchQuery ? (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="text-slate-400 hover:text-slate-600 focus:outline-none"
+                            >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        ) : (
+                            <svg className="h-5 w-5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        )}
+                    </div>
+                </div>
+
                 {/* Customers Grid */}
                 {loading ? (
                     <div className="p-12 text-center">
@@ -175,49 +224,75 @@ const TailorCustomers = () => {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <h2 className="text-lg md:text-xl font-bold text-slate-800 mb-1 px-1">Customers</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                            {customers.map((customer, index) => (
-                                <div key={index} className="bg-white border border-slate-200 rounded-xl md:rounded-2xl p-4 md:p-6 shadow-sm hover:shadow-md md:hover:shadow-lg transition-all">
-                                    <div className="flex items-start gap-3 md:gap-4">
-                                        <div className="w-10 h-10 md:w-12 md:h-12 bg-linear-to-br from-[#6b4423] to-[#8b5a3c] rounded-full flex items-center justify-center text-white font-bold text-base md:text-lg shrink-0">
-                                            {getInitials(customer.name)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start mb-1 md:mb-2 text-wrap">
-                                                <div className="min-w-0 flex-1 mr-2">
-                                                    <h3 className="text-base md:text-lg font-bold text-slate-800 truncate">{customer.name}</h3>
-                                                    <p className="text-xs md:text-sm text-slate-500 truncate">{customer.email || 'No email'}</p>
-                                                </div>
-                                                <button
-                                                    onClick={() => window.location.href = `tel:${customer.phone}`}
-                                                    className="p-2 border border-slate-100 rounded-lg text-slate-600 hover:bg-slate-50"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                                                </button>
+                        <div className="flex justify-between items-end mb-1 px-1">
+                            <h2 className="text-lg md:text-xl font-bold text-slate-800">Customers</h2>
+                            <p className="text-xs text-slate-500 font-medium">
+                                Showing {filteredCustomers.length} of {customers.length}
+                            </p>
+                        </div>
+
+                        {filteredCustomers.length === 0 ? (
+                            <div className="p-12 text-center bg-white border border-dashed border-slate-300 rounded-2xl">
+                                <p className="text-slate-500 font-medium">No customers found</p>
+                                <p className="text-slate-400 text-sm mt-1">Try searching for a different name.</p>
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="mt-3 text-[#6b4423] text-sm font-semibold hover:underline"
+                                >
+                                    Clear search
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                                {filteredCustomers.map((customer, index) => (
+                                    <div
+                                        key={index}
+                                        onClick={() => navigate(`/dashboard/customers/${encodeURIComponent(customer.phone)}`, { state: { customerData: customer } })}
+                                        className="bg-white border border-slate-200 rounded-xl md:rounded-2xl p-4 md:p-6 shadow-sm hover:shadow-md md:hover:shadow-lg transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex items-start gap-3 md:gap-4">
+                                            <div className="w-10 h-10 md:w-12 md:h-12 bg-linear-to-br from-[#6b4423] to-[#8b5a3c] rounded-full flex items-center justify-center text-white font-bold text-base md:text-lg shrink-0 group-hover:scale-105 transition-transform">
+                                                {getInitials(customer.name)}
                                             </div>
-
-                                            <p className="text-xs md:text-sm text-slate-600 mb-3 font-medium">{customer.phone}</p>
-
-                                            <div className="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-slate-100 md:border-slate-200">
-                                                <div>
-                                                    <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Orders</p>
-                                                    <p className="text-base md:text-lg font-bold text-slate-900">{customer.orders}</p>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start mb-1 md:mb-2 text-wrap">
+                                                    <div className="min-w-0 flex-1 mr-2">
+                                                        <h3 className="text-base md:text-lg font-bold text-slate-800 truncate group-hover:text-[#6b4423] transition-colors">{customer.name}</h3>
+                                                        <p className="text-xs md:text-sm text-slate-500 truncate">{customer.email || 'No email'}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            window.location.href = `tel:${customer.phone}`;
+                                                        }}
+                                                        className="p-2 border border-slate-100 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-[#6b4423] transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                                    </button>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Spent</p>
-                                                    <p className="text-base md:text-lg font-bold text-[#6b4423]">{formatPrice(customer.totalSpent)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Last Visit</p>
-                                                    <p className="text-[10px] md:text-sm font-medium text-slate-700">{formatDate(customer.lastVisit)}</p>
+
+                                                <p className="text-xs md:text-sm text-slate-600 mb-3 font-medium">{customer.phone}</p>
+
+                                                <div className="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-slate-100 md:border-slate-200">
+                                                    <div>
+                                                        <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Orders</p>
+                                                        <p className="text-base md:text-lg font-bold text-slate-900">{customer.orders}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Spent</p>
+                                                        <p className="text-base md:text-lg font-bold text-[#6b4423]">{formatPrice(customer.totalSpent)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] md:text-xs text-slate-400 md:text-slate-500 uppercase tracking-wide">Last Visit</p>
+                                                        <p className="text-[10px] md:text-sm font-medium text-slate-700">{formatDate(customer.lastVisit)}</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </main>

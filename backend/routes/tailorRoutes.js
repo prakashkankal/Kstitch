@@ -4,6 +4,10 @@ import Tailor from '../models/Tailor.js';
 import User from '../models/User.js';
 import Review from '../models/Review.js';
 
+import Post from '../models/Post.js';
+import crypto from 'crypto';
+import sendEmail from '../utils/sendEmail.js';
+
 const router = express.Router();
 
 // Generate JWT Token
@@ -12,6 +16,8 @@ const generateToken = (id) => {
         expiresIn: '30d'
     });
 };
+
+
 
 // @desc    Register a new tailor
 // @route   POST /api/tailors/register
@@ -52,8 +58,10 @@ router.post('/register', async (req, res) => {
             specialization,
             experience,
             address,
-
-            googleId: googleId || undefined // Ensure it is not empty string, which violates unique index
+            googleId: googleId || undefined, // Ensure it is not empty string, which violates unique index
+            isVerified: false,
+            verificationToken: crypto.randomBytes(32).toString('hex'),
+            verificationTokenExpire: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
         });
 
         console.log('Tailor created successfully:', tailor.email);
@@ -76,20 +84,35 @@ router.post('/register', async (req, res) => {
                 // Don't fail registration if preset creation fails
             }
 
-            res.status(201).json({
-                _id: tailor._id,
-                name: tailor.name,
-                email: tailor.email,
-                phone: tailor.phone,
-                shopName: tailor.shopName,
-                shopImage: tailor.shopImage,
-                specialization: tailor.specialization,
-                experience: tailor.experience,
-                address: tailor.address,
-                businessHours: tailor.businessHours,
-                userType: 'tailor',
-                token: generateToken(tailor._id)
-            });
+            // Send Verification Email
+            const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${tailor.verificationToken}`;
+
+            const message = `
+                <h1>Email Verification</h1>
+                <p>Please click the link below to verify your email address:</p>
+                <a href=${verificationUrl} clicktracking=off>${verificationUrl}</a>
+            `;
+
+            try {
+                await sendEmail({
+                    email: tailor.email,
+                    subject: 'Email Verification',
+                    message,
+                    html: message
+                });
+
+                res.status(201).json({
+                    success: true,
+                    message: "Registration successful! Please check your email to verify your account."
+                });
+
+            } catch (error) {
+                console.error('Email send error:', error);
+                res.status(201).json({
+                    success: true,
+                    message: "Registration successful, but we could not send the verification email. Please contact support."
+                });
+            }
         } else {
             res.status(400).json({ message: 'Invalid tailor data' });
         }
@@ -144,6 +167,7 @@ router.post('/login', async (req, res) => {
                 specialization: tailor.specialization,
                 experience: tailor.experience,
                 address: tailor.address,
+                location: tailor.location,
                 businessHours: tailor.businessHours,
                 userType: 'tailor',
                 token: generateToken(tailor._id)
@@ -194,12 +218,50 @@ router.put('/upload-image', async (req, res) => {
     }
 });
 
+// @desc    Upload banner image
+// @route   PUT /api/tailors/upload-banner-image
+// @access  Private
+router.put('/upload-banner-image', async (req, res) => {
+    try {
+        const { email, bannerImage } = req.body;
+
+        if (!email || !bannerImage) {
+            return res.status(400).json({ message: 'Email and banner image are required' });
+        }
+
+        // Find tailor and update banner image
+        const tailor = await Tailor.findOneAndUpdate(
+            { email },
+            { bannerImage },
+            { new: true }
+        ).select('-password');
+
+        if (!tailor) {
+            return res.status(404).json({ message: 'Tailor not found' });
+        }
+
+        res.json({
+            _id: tailor._id,
+            name: tailor.name,
+            email: tailor.email,
+            shopName: tailor.shopName,
+            shopImage: tailor.shopImage,
+            bannerImage: tailor.bannerImage,
+            userType: 'tailor',
+            message: 'Banner image updated successfully'
+        });
+    } catch (error) {
+        console.error('Banner image upload error:', error);
+        res.status(500).json({ message: 'Server error during banner image upload' });
+    }
+});
+
 // @desc    Update tailor profile
 // @route   PUT /api/tailors/update-profile
 // @access  Private
 router.put('/update-profile', async (req, res) => {
     try {
-        const { email, name, shopName, phone, specialization, address, businessHours } = req.body;
+        const { email, name, shopName, phone, specialization, address, businessHours, location, bio } = req.body;
 
         if (!email) {
             return res.status(400).json({ message: 'Email is required' });
@@ -213,7 +275,12 @@ router.put('/update-profile', async (req, res) => {
         if (specialization) updateData.specialization = specialization;
         if (address) updateData.address = address;
         if (businessHours) updateData.businessHours = businessHours;
-        if (req.body.bio) updateData.bio = req.body.bio;
+        if (location) updateData.location = location;
+
+        // Handle bio explicitly (allow empty string)
+        if (bio !== undefined) {
+            updateData.bio = bio;
+        }
 
         // Find tailor and update profile
         const tailor = await Tailor.findOneAndUpdate(
@@ -237,6 +304,7 @@ router.put('/update-profile', async (req, res) => {
             experience: tailor.experience,
             bio: tailor.bio,
             address: tailor.address,
+            location: tailor.location,
             businessHours: tailor.businessHours,
             userType: 'tailor',
             message: 'Profile updated successfully'
@@ -255,8 +323,80 @@ router.get('/', async (req, res) => {
         const limit = parseInt(req.query.limit) || 12;
         const skip = parseInt(req.query.skip) || 0;
 
-        const total = await Tailor.countDocuments();
-        const tailors = await Tailor.find()
+        // Search & Filter Parameters
+        const { service, locationText, lat, lng, radius } = req.query;
+
+        const query = {};
+
+        // 1. Service Filter
+        if (service) {
+            // Mapping frontend service values to backend specialization/services
+            // Values: 'men-tailoring', 'women-tailoring', 'alterations', 'custom-stitching', 'repairs'
+            if (service === 'men-tailoring') {
+                query.specialization = { $in: ['men', 'all'] };
+            } else if (service === 'women-tailoring') {
+                query.specialization = { $in: ['women', 'all'] };
+            } else if (service === 'alterations') {
+                // If services field is populated, search in it. Use regex for flexibility.
+                query.$or = [
+                    { services: { $regex: 'alteration', $options: 'i' } },
+                    { services: { $regex: 'repair', $options: 'i' } },
+                    { specialization: 'all' } // Fallback for general tailors
+                ];
+            } else if (service === 'custom-stitching') {
+                query.$or = [
+                    { services: { $regex: 'custom', $options: 'i' } },
+                    { services: { $regex: 'stitch', $options: 'i' } },
+                    { specialization: { $exists: true } } // Almost all tailors do this
+                ];
+            } else if (service === 'repairs') {
+                query.$or = [
+                    { services: { $regex: 'repair', $options: 'i' } },
+                    { services: { $regex: 'alteration', $options: 'i' } }
+                ];
+            }
+        }
+
+        // 2. Location Filter (Text or Geo)
+        if (lat && lng) {
+            // Geospatial Query
+            // Note: This requires a 2dsphere index on 'location'. 
+            // If index is missing, this might error. For safety/prototyping without migration scripts, 
+            // we can fallback to simple bounds check or accept that it might fail if not indexed.
+            // Let's use a basic box approximation if we can't trust the index, or just standard $near if we assume it exists.
+
+            // Assuming we might NOT have the index, let's filter after fetch if dataset is small, 
+            // OR use basic range matching on lat/lng fields directly.
+
+            const radiusInKm = parseFloat(radius) || 10;
+            const latNum = parseFloat(lat);
+            const lngNum = parseFloat(lng);
+
+            // Approx 1 degree lat = 111km
+            const latDelta = radiusInKm / 111;
+            const lngDelta = radiusInKm / (111 * Math.cos(latNum * (Math.PI / 180)));
+
+            query['location.latitude'] = { $gte: latNum - latDelta, $lte: latNum + latDelta };
+            query['location.longitude'] = { $gte: lngNum - lngDelta, $lte: lngNum + lngDelta };
+
+        } else if (locationText && locationText.trim() !== '' && locationText !== 'Nearby') {
+            // Text Search on City/State/Address
+            const regex = new RegExp(locationText, 'i');
+            query.$or = [
+                { 'address.city': regex },
+                { 'address.state': regex },
+                { 'address.street': regex },
+                { 'location.address': regex },
+                { city: regex }, // Legacy fields check
+                { state: regex }
+            ];
+        }
+
+        // 3. Active Check (if applicable)
+        // query.isActive = true; // Uncomment if field exists
+
+        const total = await Tailor.countDocuments(query);
+        const tailors = await Tailor.find(query)
             .select('-password')
             .sort({ createdAt: -1 })
             .limit(limit)
@@ -290,10 +430,14 @@ router.get('/:id', async (req, res) => {
         // Fetch reviews
         const reviews = await Review.find({ tailorId: tailor._id }).sort({ createdAt: -1 });
 
+        // Fetch portfolio (posts)
+        const posts = await Post.find({ tailor: tailor._id }).sort({ createdAt: -1 });
+
         // Convert to object and add reviews data
         const tailorData = tailor.toObject();
         tailorData.reviews = reviews;
         tailorData.totalReviews = reviews.length;
+        tailorData.portfolio = posts; // Add posts as portfolio
 
         res.json(tailorData);
     } catch (error) {
@@ -337,6 +481,77 @@ router.post('/:id/reviews', async (req, res) => {
         res.status(201).json(review);
     } catch (error) {
         res.status(400).json({ message: error.message });
+    }
+});
+
+// @desc    Update a review
+// @route   PUT /api/tailors/:id/reviews/:reviewId
+// @access  Private
+router.put('/:id/reviews/:reviewId', async (req, res) => {
+    try {
+        const { rating, comment, userId } = req.body;
+        const { id: tailorId, reviewId } = req.params;
+
+        const review = await Review.findById(reviewId);
+
+        if (!review) {
+            return res.status(404).json({ message: 'Review not found' });
+        }
+
+        // Check ownership
+        if (review.customerId.toString() !== userId) {
+            return res.status(401).json({ message: 'Not authorized to update this review' });
+        }
+
+        review.rating = Number(rating);
+        review.comment = comment;
+        await review.save();
+
+        // Recalculate average rating
+        const reviews = await Review.find({ tailorId });
+        const avg = reviews.reduce((acc, item) => item.rating + acc, 0) / reviews.length;
+
+        await Tailor.findByIdAndUpdate(tailorId, { rating: avg });
+
+        res.json(review);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @desc    Delete a review
+// @route   DELETE /api/tailors/:id/reviews/:reviewId
+// @access  Private
+router.delete('/:id/reviews/:reviewId', async (req, res) => {
+    try {
+        const { reviewId, id: tailorId } = req.params;
+        const { userId } = req.body;
+
+        const review = await Review.findById(reviewId);
+
+        if (!review) {
+            return res.status(404).json({ message: 'Review not found' });
+        }
+
+        // Check ownership
+        if (userId && review.customerId.toString() !== userId) {
+            return res.status(401).json({ message: 'Not authorized to delete this review' });
+        }
+
+        await Review.deleteOne({ _id: reviewId });
+
+        // Recalculate average rating
+        const reviews = await Review.find({ tailorId });
+        let avg = 0;
+        if (reviews.length > 0) {
+            avg = reviews.reduce((acc, item) => item.rating + acc, 0) / reviews.length;
+        }
+
+        await Tailor.findByIdAndUpdate(tailorId, { rating: avg });
+
+        res.json({ message: 'Review removed' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 

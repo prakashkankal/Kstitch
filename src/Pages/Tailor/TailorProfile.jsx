@@ -86,13 +86,7 @@ const TailorProfile = () => {
     }, [location, navigate]);
 
     const handleNewPost = () => {
-        const completion = calculateProfileCompletion(tailorData);
-        if (completion.percentage < 100) {
-            setToast('Please complete your profile to create posts.');
-            setTimeout(() => setToast(null), 3000);
-            setShowProfileModal(true);
-            return;
-        }
+
 
         setSelectedPost(null);
         setIsEditing(false);
@@ -198,11 +192,11 @@ const TailorProfile = () => {
                 setShowProfileModal={setShowProfileModal}
             />
             {/* Main Content */}
-            <main className="flex-1 lg:ml-72 pt-14 lg:pt-0 p-0 md:p-6 lg:p-8 dashboard-main-mobile min-w-0">
+            <main className="flex-1 lg:ml-72 pt-14 lg:pt-0 p-0 dashboard-main-mobile min-w-0">
 
                 {/* Profile Completion Banner - Feedback */}
                 {tailorData && calculateProfileCompletion(tailorData).percentage < 100 && (
-                    <div className="mx-6 md:mx-0 mt-6 md:mt-0 mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between shadow-sm animate-fade-in relative z-10">
+                    <div className="mx-0 mt-0 mb-2 bg-amber-50 border-b border-amber-200 p-4 flex items-center justify-between shadow-sm animate-fade-in relative z-10">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 shrink-0">
                                 <span className="font-bold text-sm">{calculateProfileCompletion(tailorData).percentage}%</span>
@@ -223,67 +217,94 @@ const TailorProfile = () => {
                     </div>
                 )}
 
-                {/* Profile Header - Mobile Optimized */}
-                <div className="bg-white p-6 md:rounded-2xl border-b md:border border-slate-200 shadow-sm mb-6">
-                    <div className="flex flex-col items-center md:flex-row md:items-start gap-6">
-                        {/* Profile Image/Initials */}
-                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-amber-50 shadow-md shrink-0">
-                            {tailorData.shopImage ? (
-                                <img src={tailorData.shopImage} alt="Shop" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full bg-linear-to-br from-[#6b4423] to-[#8b5a3c] flex items-center justify-center text-white font-bold text-2xl md:text-3xl">
-                                    {getInitials(tailorData.name)}
+                {/* Profile Header - Facebook Style */}
+                <div className="bg-white shadow-sm mb-4 overflow-hidden">
+                    {/* Cover Photo Area */}
+                    <div className="h-48 md:h-64 w-full bg-linear-to-r from-slate-200 to-slate-300 relative">
+                        {tailorData.bannerImage ? (
+                            <img src={tailorData.bannerImage} alt="Cover" className="w-full h-full object-cover" />
+                        ) : (
+                            <>
+                                <div className="absolute inset-0 bg-linear-to-br from-[#6b4423] to-[#8b5a3c] opacity-80"></div>
+                                <div className="absolute inset-0 flex items-center justify-center text-white/30 font-bold text-4xl uppercase tracking-widest select-none">
+                                    {tailorData.shopName}
                                 </div>
-                            )}
-                        </div>
+                            </>
+                        )}
+                    </div>
 
-                        {/* Profile Info */}
-                        <div className="text-center md:text-left flex-1 flex flex-col gap-2 md:gap-3">
-                            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">{tailorData.shopName}</h1>
-
-                            <div className="flex items-center justify-center md:justify-start gap-1.5 text-slate-600">
-                                <svg className="w-5 h-5 text-[#6b4423] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                <span className="text-sm font-medium">
-                                    {[tailorData.address?.city || tailorData.city, tailorData.address?.state || tailorData.state].filter(Boolean).join(', ') || "Location not added"}
-                                </span>
+                    <div className="px-5 relative">
+                        <div className="flex flex-col md:flex-row items-start gap-4 -mt-16 md:-mt-20 mb-4">
+                            {/* Profile Picture (Overlapping Banner) */}
+                            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white shadow-md overflow-hidden bg-white shrink-0 relative z-10">
+                                {tailorData.shopImage ? (
+                                    <img src={tailorData.shopImage} alt="Shop" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-3xl md:text-4xl">
+                                        {getInitials(tailorData.name)}
+                                    </div>
+                                )}
                             </div>
 
-                            <p className="text-base text-slate-700 max-w-lg mx-auto md:mx-0 leading-relaxed">
-                                {tailorData.bio || "Professional tailor specializing in custom fittings and modern designs."}
-                            </p>
+                            {/* Profile Info & Actions */}
+                            <div className="flex-1 w-full pt-2 md:pt-20">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                    <div>
+                                        <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                                            {tailorData.shopName}
+                                        </h1>
+                                        <p className="text-lg text-slate-600 font-medium">
+                                            {tailorData.name} <span className="text-slate-400 text-sm font-normal">• Owner</span>
+                                        </p>
+
+                                        <div className="flex items-center gap-2 text-slate-500 mt-2 text-sm">
+                                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            <span>
+                                                {[tailorData.address?.city || tailorData.city, tailorData.address?.state || tailorData.state].filter(Boolean).join(', ') || "Location not added"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Desktop Actions */}
+                                    <div className="hidden lg:flex gap-3 shrink-0">
+                                        <button onClick={() => setShowProfileModal(true)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold transition-colors flex items-center gap-2">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            Edit Profile
+                                        </button>
+                                        <button onClick={handleNewPost} className="px-5 py-2.5 bg-[#6b4423] hover:bg-[#573619] text-white rounded-lg font-bold transition-colors flex items-center gap-2 shadow-sm">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                            New Post
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Bio Section */}
+                                <div className="mt-6 max-w-2xl">
+                                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                        {tailorData.bio || "Professional tailor specializing in custom fittings and modern designs."}
+                                    </p>
+                                </div>
+
+
+                            </div>
+                        </div>
+
+                        {/* Mobile Actions */}
+                        <div className="lg:hidden flex gap-3 mt-2 mb-2">
+                            <button
+                                onClick={() => setShowProfileModal(true)}
+                                className="flex-1 py-2.5 bg-slate-100 text-slate-800 rounded-lg font-bold transition-colors text-sm"
+                            >
+                                Edit Profile
+                            </button>
+                            <button
+                                onClick={handleNewPost}
+                                className="flex-1 py-2.5 bg-[#6b4423] text-white rounded-lg font-bold transition-colors text-sm shadow-sm"
+                            >
+                                New Post
+                            </button>
                         </div>
                     </div>
-
-                    {/* --- MOBILE ACTIONS (Edit Profile, + New Post) --- */}
-                    <div className="lg:hidden flex gap-3 mt-6 mb-6">
-                        <button
-                            onClick={() => setShowProfileModal(true)}
-                            className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 shadow-sm active:bg-slate-50 transition-colors"
-                        >
-                            Edit Profile
-                        </button>
-                        <button
-                            onClick={handleNewPost}
-                            className="flex-1 py-3 bg-[#6b4423] text-white rounded-xl font-bold shadow-md active:bg-[#573619] transition-colors flex items-center justify-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                            New Post
-                        </button>
-                    </div>
-
-                    {/* --- DESKTOP ACTIONS (Preserved) --- */}
-                    {/* --- DESKTOP ACTIONS (Refactored) --- */}
-                    <div className="hidden lg:flex gap-3 mt-8">
-                        <button onClick={handleNewPost} className="flex-1 py-3 px-6 bg-[#6b4423] text-white rounded-xl font-bold shadow-md hover:bg-[#573619] transition-colors flex items-center justify-center gap-2">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                            New Post
-                        </button>
-                        <button onClick={() => setShowProfileModal(true)} className="flex-1 py-3 px-6 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
-                            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                            Edit Profile
-                        </button>
-                    </div>
-
                 </div>
 
                 {/* --- MOBILE PORTFOLIO GRID --- */}

@@ -42,9 +42,20 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/presets', presetRoutes);
 app.use('/api/posts', postRoutes);
 
-app.get('/', (req, res) => {
-    res.send('API is running...');
-});
+// Serve static assets in production
+if (process.env.NODE_ENV === 'production') {
+    // Set static folder (Assuming frontend build is in ../dist relative to backend)
+    // Adjust this path if your build folder is elsewhere
+    app.use(express.static(path.join(__dirname, '../dist')));
+
+    app.get('*', (req, res) => {
+        res.sendFile(path.resolve(__dirname, '../dist', 'index.html'));
+    });
+} else {
+    app.get('/', (req, res) => {
+        res.send('API is running...');
+    });
+}
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);

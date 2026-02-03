@@ -111,11 +111,14 @@ router.get('/my-orders/:customerId', async (req, res) => {
 router.get('/:tailorId', async (req, res) => {
     try {
         const { tailorId } = req.params;
-        const { status, page = 1, limit = 10 } = req.query;
+        const { status, page = 1, limit = 10, customerPhone } = req.query;
 
         const query = { tailorId };
         if (status) {
             query.status = status;
+        }
+        if (customerPhone) {
+            query.customerPhone = customerPhone;
         }
 
         const orders = await Order.find(query)
@@ -269,7 +272,7 @@ router.post('/', async (req, res) => {
 router.put('/:orderId/status', async (req, res) => {
     try {
         const { orderId } = req.params;
-        const { status } = req.body;
+        const { status, paymentMode, finalPaymentAmount } = req.body;
 
         // Get current order
         const order = await Order.findById(orderId);
@@ -282,7 +285,7 @@ router.put('/:orderId/status', async (req, res) => {
         const validTransitions = {
             'Order Created': ['Cutting Completed'],
             'Cutting Completed': ['Order Completed'],
-            'Order Completed': [], // Final status, no transitions allowed
+            'Order Completed': ['Delivered'],
             // Legacy statuses for backward compatibility
             'Pending': ['In Progress', 'Cancelled'],
             'In Progress': ['Completed', 'Cancelled'],
@@ -307,6 +310,13 @@ router.put('/:orderId/status', async (req, res) => {
             updateData.cuttingCompletedAt = new Date();
         } else if (status === 'Order Completed') {
             updateData.completedAt = new Date();
+        } else if (status === 'Delivered') {
+            updateData.deliveredAt = new Date();
+            // If payment details provided, save them
+            if (paymentMode) updateData.paymentMode = paymentMode;
+            if (finalPaymentAmount !== undefined) updateData.finalPaymentAmount = finalPaymentAmount;
+            // Mark as paid if delivered (assuming COD or Pre-paid confirmed at delivery)
+            updateData.isPaid = true;
         }
 
         const updatedOrder = await Order.findByIdAndUpdate(
@@ -315,7 +325,46 @@ router.put('/:orderId/status', async (req, res) => {
             { new: true, runValidators: true }
         );
 
-        res.json(updatedOrder);
+        // Generate WhatsApp Bill if Delivered
+        let whatsappMessage = '';
+        if (status === 'Delivered') {
+            try {
+                const tailor = await Tailor.findById(updatedOrder.tailorId);
+                const shopName = tailor ? tailor.shopName : 'Tailor Shop';
+
+                const tailorName = tailor ? tailor.name : 'Master';
+                const balanceDue = updatedOrder.price - (updatedOrder.advancePayment || 0);
+                const deliveryDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+                // Construct URL dynamically based on the request host to support local IP access (better for mobile links)
+                const baseUrl = process.env.API_URL || `${req.protocol}://${req.get('host')}`;
+                const invoiceLink = `${baseUrl}/api/orders/${updatedOrder._id}/invoice`;
+
+                console.log('Generating Delivery WhatsApp Message for Order:', updatedOrder._id);
+
+                whatsappMessage = `Hello ${updatedOrder.customerName},\n\n` +
+                    `Thank you for choosing ${shopName}.\n` +
+                    `Your invoice for Order ID #${updatedOrder._id.toString().slice(-6).toUpperCase()} is ready.\n\n` +
+                    `Amount: ₹${updatedOrder.price}\n` +
+                    `Balance Due: ₹${balanceDue}\n` +
+                    `Delivery Date: ${deliveryDate}\n\n` +
+                    `👉 View & download your invoice here:\n` +
+                    `${invoiceLink}\n\n` +
+                    `If you have any questions or need alterations, feel free to contact us.\n\n` +
+                    `Regards,\n` +
+                    `${tailorName}\n` +
+                    `${shopName}\n` +
+                    `📞 ${tailor.phone}`;
+            } catch (err) {
+                console.error('Error generating WA message:', err);
+            }
+        }
+
+        res.json({
+            order: updatedOrder,
+            whatsappMessage,
+            customerPhone: updatedOrder.customerPhone
+        });
     } catch (error) {
         console.error('Update order status error:', error);
         res.status(500).json({ message: 'Error updating order status', error: error.message });
@@ -390,6 +439,158 @@ router.get('/customers/:tailorId', async (req, res) => {
     } catch (error) {
         console.error('Get customers error:', error);
         res.status(500).json({ message: 'Error fetching customers', error: error.message });
+    }
+});
+
+// @desc    Generate PDF Invoice
+// @route   GET /api/orders/:orderId/invoice
+// @access  Public (Shareable Link)
+router.get('/:orderId/invoice', async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const order = await Order.findById(orderId);
+
+        if (!order) return res.status(404).send('Order not found');
+
+        const tailor = await Tailor.findById(order.tailorId);
+
+        // Create PDF
+        const PDFDocument = (await import('pdfkit')).default;
+        const doc = new PDFDocument({ margin: 50 });
+
+        // Set Headers
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename=Invoice-${order._id.toString().slice(-6)}.pdf`);
+
+        doc.pipe(res);
+
+        // --- Design ---
+        doc.font('Helvetica');
+
+        // 1. Header (Company Info) - Top Left
+        // Shop Name
+        doc.fillColor('#333333').fontSize(20).text(tailor?.shopName || 'Tailor Shop', 50, 50);
+
+        // Address & Phone
+        doc.fontSize(10);
+        const street = tailor?.address?.street || '';
+        if (street) doc.text(street, 50, 75);
+
+        let cityLine = tailor?.address?.city || '';
+        if (tailor?.address?.zipCode) cityLine += `, ${tailor.address.zipCode}`;
+        doc.text(cityLine, 50, street ? 90 : 75);
+
+        doc.text(`Phone: ${tailor?.phone || ''}`, 50, street ? 105 : 90);
+
+        // 2. Invoice Title Box - Top Right
+        doc.fillColor('#4472C4').fontSize(28).text('INVOICE', 350, 50, { align: 'right' });
+
+        // Invoice # & Date Grid
+        const gridY = 90;
+        // Headers
+        doc.rect(350, gridY, 100, 20).fill('#cfdbe6'); // Invoice # Header Bg
+        doc.rect(450, gridY, 100, 20).fill('#cfdbe6'); // Date Header Bg
+        doc.fillColor('#333333').fontSize(10).font('Helvetica-Bold');
+        doc.text('INVOICE #', 350, gridY + 6, { width: 100, align: 'center' });
+        doc.text('DATE', 450, gridY + 6, { width: 100, align: 'center' });
+
+        // Values
+        const invoiceNum = order._id.toString().slice(-6).toUpperCase();
+        const invoiceDate = new Date().toLocaleDateString();
+        doc.rect(350, gridY + 20, 100, 20).stroke('#cccccc');
+        doc.rect(450, gridY + 20, 100, 20).stroke('#cccccc');
+        doc.font('Helvetica').fontSize(10).fillColor('#000000');
+        doc.text(invoiceNum, 350, gridY + 26, { width: 100, align: 'center' });
+        doc.text(invoiceDate, 450, gridY + 26, { width: 100, align: 'center' });
+
+        // 3. Bill To Section
+        const billToY = 160;
+        doc.fillColor('#4472C4').fontSize(12).font('Helvetica-Bold').text('BILL TO', 50, billToY);
+        doc.rect(50, billToY + 18, 200, 15).fill('#cfdbe6'); // Header Bg
+        doc.fillColor('#000000').fontSize(10).text('Name', 55, billToY + 21);
+
+        doc.font('Helvetica');
+        doc.text(order.customerName, 50, billToY + 40);
+        doc.text(order.customerPhone, 50, billToY + 55);
+        if (order.customerEmail) doc.text(order.customerEmail, 50, billToY + 70);
+
+        // 4. Table Header
+        const tableY = 240;
+        doc.rect(50, tableY, 400, 25).fill('#cfdbe6'); // Description Header Bg
+        doc.rect(450, tableY, 100, 25).fill('#cfdbe6'); // Amount Header Bg
+
+        doc.fillColor('#4472C4').font('Helvetica-Bold').fontSize(10);
+        doc.text('DESCRIPTION', 60, tableY + 8);
+        doc.text('AMOUNT', 450, tableY + 8, { width: 100, align: 'center' });
+
+        // 5. Table Rows
+        let y = tableY + 35;
+        doc.font('Helvetica').fontSize(10).fillColor('#000000');
+
+        const addRow = (desc, amount) => {
+            doc.text(desc, 60, y);
+            doc.text(amount, 450, y, { width: 100, align: 'center' });
+            y += 20;
+        };
+
+        if (order.orderItems && order.orderItems.length > 0) {
+            order.orderItems.forEach(item => {
+                addRow(`${item.garmentType} (Qty: ${item.quantity})`, item.totalPrice.toFixed(2));
+            });
+        } else {
+            addRow(order.orderType, order.price.toFixed(2));
+        }
+
+        // Draw line below items if needed, or sidebar line
+        doc.moveTo(450, tableY).lineTo(450, y).stroke('#cccccc'); // Vertical divider
+
+        // 6. Totals Section
+        y += 20;
+        const totalXLabel = 300;
+        const totalXValue = 450;
+
+        // Subtotal
+        doc.font('Helvetica').text('Subtotal', totalXLabel, y, { align: 'right', width: 140 });
+        doc.text(order.price.toFixed(2), totalXValue, y, { width: 100, align: 'center' });
+        y += 15;
+
+        // Advance Paid
+        if (order.advancePayment > 0) {
+            doc.text('Advance Paid', totalXLabel, y, { align: 'right', width: 140 });
+            doc.text(`(${order.advancePayment.toFixed(2)})`, totalXValue, y, { width: 100, align: 'center' });
+            y += 15;
+        }
+
+        // Divider
+        doc.rect(totalXLabel, y, 250, 1).fill('#4472C4');
+        y += 10;
+
+        // Total
+        doc.fontSize(12).font('Helvetica-Bold').fillColor('#000000');
+        doc.text('TOTAL', totalXLabel, y, { align: 'right', width: 140 });
+        doc.text('Rs. ' + (order.price - order.advancePayment).toFixed(2), totalXValue, y, { width: 100, align: 'center' });
+
+        // Paid Stamp if delivered
+        doc.moveDown(4);
+        if (order.status === 'Delivered') {
+            const stampY = 600;
+            doc.rotate(-10, { origin: [280, stampY] });
+            doc.fontSize(30).fillColor('green').opacity(0.3).text('PAID & DELIVERED', 130, stampY, { align: 'center' });
+            doc.rotate(0); // Reset rotation
+            doc.opacity(1);
+        }
+
+        // 7. Footer
+        doc.fontSize(10).fillColor('#000000').font('Helvetica-Oblique');
+        doc.text('Thank you for your business!', 50, 700, { align: 'center', width: 500 });
+        doc.fontSize(8).text('If you have any questions about this invoice, please contact', 50, 720, { align: 'center' });
+        doc.text(`${tailor?.shopName || 'Us'} at ${tailor?.phone || ''}`, 50, 735, { align: 'center' });
+
+        doc.end();
+
+    } catch (error) {
+        console.error('PDF Gen Error:', error);
+        res.status(500).send('Error generating invoice');
     }
 });
 

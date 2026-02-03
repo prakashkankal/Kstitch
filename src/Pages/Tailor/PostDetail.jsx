@@ -137,6 +137,18 @@ const PostDetail = () => {
         }
     };
 
+    // Get current user info for display
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+
+    const getInitials = (name) => {
+        if (!name) return 'ME';
+        const names = name.split(' ');
+        if (names.length >= 2) {
+            return `${names[0][0]}${names[1][0]}`.toUpperCase();
+        }
+        return name.substring(0, 2).toUpperCase();
+    };
+
     return (
         <div className="w-full min-h-screen bg-white md:bg-[#f5f5f0] pb-32 md:pb-0 md:flex md:justify-center md:items-start md:pt-8">
             <div className="w-full md:max-w-xl bg-white md:rounded-2xl md:shadow-sm md:border md:border-slate-200 overflow-hidden min-h-screen md:min-h-[80vh] relative">
@@ -187,12 +199,18 @@ const PostDetail = () => {
                     <div className="px-5 py-6 space-y-6">
                         {/* Owner Info */}
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-[#6b4423] font-bold text-sm">
-                                ME
+                            <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-100 shrink-0">
+                                {userInfo.shopImage ? (
+                                    <img src={userInfo.shopImage} alt={userInfo.shopName} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-amber-100 flex items-center justify-center text-[#6b4423] font-bold text-sm">
+                                        {getInitials(userInfo.shopName || userInfo.name)}
+                                    </div>
+                                )}
                             </div>
                             <div>
-                                <p className="font-bold text-slate-900">My Shop Name</p>
-                                <p className="text-xs text-slate-500">{post.date}</p>
+                                <p className="font-bold text-slate-900">{userInfo.shopName || userInfo.name || 'My Shop'}</p>
+                                <p className="text-xs text-slate-500">{post.date ? new Date(post.date).toLocaleDateString() : 'Just now'}</p>
                             </div>
                         </div>
 
@@ -201,7 +219,7 @@ const PostDetail = () => {
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 text-xs font-bold border border-amber-100">{post.category}</span>
                                 <span className="text-slate-300">•</span>
-                                <span className="text-lg font-bold text-[#6b4423]">{post.price}</span>
+                                <span className="text-lg font-bold text-[#6b4423]">₹{post.price}</span>
                             </div>
                             <p className="text-slate-600 leading-relaxed text-base">{post.description}</p>
                         </div>

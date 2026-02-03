@@ -2,6 +2,8 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import User from '../models/User.js';
+import crypto from 'crypto';
+import sendEmail from '../utils/sendEmail.js';
 
 const router = express.Router();
 
@@ -39,30 +41,49 @@ router.post('/register', async (req, res) => {
         console.log('Creating user...');
 
         // Create user (password will be hashed by the pre-save hook)
+        // Create user (password will be hashed by the pre-save hook)
         const user = await User.create({
             name,
             email,
             password,
-            phone
+            phone,
+            isVerified: false,
+            verificationToken: crypto.randomBytes(32).toString('hex'),
+            verificationTokenExpire: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
         });
 
         console.log('User created successfully:', user.email);
 
         if (user) {
-            res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                profilePhoto: user.profilePhoto,
-                bio: user.bio,
-                dateOfBirth: user.dateOfBirth,
-                gender: user.gender,
-                city: user.city,
-                country: user.country,
-                alternatePhone: user.alternatePhone,
-                token: generateToken(user._id)
-            });
+            // Send Verification Email
+            const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${user.verificationToken}`;
+
+            const message = `
+                <h1>Email Verification</h1>
+                <p>Please click the link below to verify your email address:</p>
+                <a href=${verificationUrl} clicktracking=off>${verificationUrl}</a>
+            `;
+
+            try {
+                await sendEmail({
+                    email: user.email,
+                    subject: 'Email Verification',
+                    message,
+                    html: message
+                });
+
+                res.status(201).json({
+                    success: true,
+                    message: "Registration successful! Please check your email to verify your account."
+                });
+
+            } catch (error) {
+                console.error('Email send error:', error);
+                res.status(201).json({
+                    success: true,
+                    message: "Registration successful, but we could not send the verification email. Please contact support."
+                });
+            }
         }
     } catch (error) {
         console.error('Registration error:', error);
