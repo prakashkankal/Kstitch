@@ -96,6 +96,11 @@ const App = () => {
               <TailorOrders />
             </ProtectedTailorRoute>
           } />
+          <Route path="/orders/new" element={
+            <ProtectedTailorRoute>
+              <NewOrder />
+            </ProtectedTailorRoute>
+          } />
           <Route path="/orders/:orderId" element={
             <ProtectedTailorRoute>
               <OrderDetailsPage />

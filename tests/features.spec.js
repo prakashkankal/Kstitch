@@ -9,8 +9,9 @@ import { test, expect } from '@playwright/test';
  */
 async function login(page, email = 'test@example.com', password = 'password123') {
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
+    // Updated to use placeholders as per actual UI (labels are visually hidden or not used as expected by getByLabel)
+    await page.getByPlaceholder(/example@mail.com|email/i).fill(email);
+    await page.getByPlaceholder(/••••••••|password/i).fill(password);
     await page.getByRole('button', { name: /login|sign in/i }).click();
     // Wait for navigation after login
     await page.waitForLoadState('networkidle');
@@ -153,6 +154,9 @@ test.describe('Settings and Preferences', () => {
         test.skip(!process.env.TEST_USER_EMAIL, 'No test user credentials provided');
 
         await login(page, process.env.TEST_USER_EMAIL, process.env.TEST_USER_PASSWORD);
+
+        // Navigate to profile page where logout option resides
+        await page.goto('/profile');
 
         // Look for logout button
         const logoutButton = page.getByRole('button', { name: /logout|sign out/i })

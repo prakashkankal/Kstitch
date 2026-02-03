@@ -300,11 +300,12 @@ const NewOrder = () => {
                             <h2 className="text-xl font-bold text-slate-800 mb-4">Customer Information</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    <label htmlFor="customerName" className="block text-sm font-medium text-slate-700 mb-2">
                                         Customer Name <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
+                                        id="customerName"
                                         name="customerName"
                                         value={customerInfo.customerName}
                                         onChange={handleCustomerInfoChange}
@@ -314,11 +315,12 @@ const NewOrder = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    <label htmlFor="customerPhone" className="block text-sm font-medium text-slate-700 mb-2">
                                         Mobile Number <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="tel"
+                                        id="customerPhone"
                                         name="customerPhone"
                                         value={customerInfo.customerPhone}
                                         onChange={handleCustomerInfoChange}
@@ -328,11 +330,12 @@ const NewOrder = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    <label htmlFor="customerEmail" className="block text-sm font-medium text-slate-700 mb-2">
                                         Email (Optional)
                                     </label>
                                     <input
                                         type="email"
+                                        id="customerEmail"
                                         name="customerEmail"
                                         value={customerInfo.customerEmail}
                                         onChange={handleCustomerInfoChange}
@@ -341,11 +344,12 @@ const NewOrder = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    <label htmlFor="dueDate" className="block text-sm font-medium text-slate-700 mb-2">
                                         Due Date <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="date"
+                                        id="dueDate"
                                         name="dueDate"
                                         value={customerInfo.dueDate}
                                         onChange={handleCustomerInfoChange}

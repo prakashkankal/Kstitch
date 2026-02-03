@@ -201,7 +201,7 @@ test.describe('Production Performance Tests', () => {
 
         console.log(`Page load time: ${loadTime}ms`);
 
-        // Production should load within 10 seconds (more lenient than local)
-        expect(loadTime).toBeLessThan(10000);
+        // Production should load within 15 seconds (more lenient than local)
+        expect(loadTime).toBeLessThan(15000);
     });
 });

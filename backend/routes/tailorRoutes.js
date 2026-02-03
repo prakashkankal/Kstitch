@@ -52,7 +52,8 @@ router.post('/register', async (req, res) => {
             specialization,
             experience,
             address,
-            googleId
+
+            googleId: googleId || undefined // Ensure it is not empty string, which violates unique index
         });
 
         console.log('Tailor created successfully:', tailor.email);
