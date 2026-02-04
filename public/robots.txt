@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://kstitch.vercel.app/sitemap.xml
+Sitemap: https://kstitch-teilor.vercel.app/sitemap.xml
