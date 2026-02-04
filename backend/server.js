@@ -51,5 +51,4 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Network access: http://192.168.31.26:${PORT}`);
 });
