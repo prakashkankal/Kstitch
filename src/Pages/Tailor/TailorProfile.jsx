@@ -61,6 +61,11 @@ const TailorProfile = () => {
                 },
             };
             const { data } = await axios.get(`${API_URL}/api/posts/my-posts`, config);
+            console.log('📚 Fetched posts:', data);
+            console.log('📊 Total posts:', data.length);
+            if (data.length > 0) {
+                console.log('🖼️ First post images:', data[0].images);
+            }
             setPortfolioItems(data);
         } catch (error) {
             console.error('Error fetching posts:', error);
@@ -134,6 +139,7 @@ const TailorProfile = () => {
 
             const uploadRes = await axios.post(`${API_URL}/api/posts/upload`, formData, config);
             const imageUrl = uploadRes.data;
+            console.log('📷 Uploaded Image URL:', imageUrl);
 
             // 2. Create Post
             const postData = {
@@ -151,12 +157,14 @@ const TailorProfile = () => {
                 },
             };
 
-            await axios.post(`${API_URL}/api/posts`, postData, jsonConfig);
+            const createRes = await axios.post(`${API_URL}/api/posts`, postData, jsonConfig);
+            console.log('✅ Created Post:', createRes.data);
 
             // Success
             setIsLoading(false);
             setShowPostModal(false);
-            fetchPosts(); // Refresh list
+            await fetchPosts(); // Refresh list
+            console.log('🔄 Posts refreshed after upload');
             setToast('Post published successfully');
             setTimeout(() => setToast(null), 3000);
 
@@ -367,20 +375,29 @@ const TailorProfile = () => {
                                     onClick={() => navigate(`/dashboard/post/${post._id || post.id}`, { state: { post } })}
                                     className="aspect-square bg-slate-100 relative overflow-hidden cursor-pointer"
                                 >
-                                    <div className="absolute inset-0 bg-linear-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                                        {/* Placeholder Icon based on Category */}
-                                        <span className="text-slate-300">
-                                            {post.category === 'Menswear' ? (
-                                                <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                            ) : (
-                                                <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                                            )}
-                                        </span>
-                                    </div>
-                                    {post.images && post.images.length > 0 && (
-                                        <img src={post.images[0]} className="absolute inset-0 w-full h-full object-cover" alt={post.title} />
+                                    {post.images && post.images.length > 0 && post.images[0] ? (
+                                        <img
+                                            key={`img-${post._id}`}
+                                            src={post.images[0]}
+                                            className="absolute inset-0 w-full h-full object-cover z-10"
+                                            alt={post.title}
+                                            onError={(e) => {
+                                                console.error('Image load error for:', post.images[0]);
+                                                e.target.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 bg-linear-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                                            {/* Placeholder Icon based on Category */}
+                                            <span className="text-slate-300">
+                                                {post.category === 'Menswear' ? (
+                                                    <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                                ) : (
+                                                    <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                                                )}
+                                            </span>
+                                        </div>
                                     )}
-                                    {/* In a real app: <img src={post.image} className="w-full h-full object-cover" /> */}
                                 </div>
                             ))}
                         </div>
@@ -402,22 +419,34 @@ const TailorProfile = () => {
                                 state={{ post: item }}
                                 className="aspect-square bg-slate-100 rounded-lg overflow-hidden relative group border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
                             >
-                                <div className="w-full h-full bg-linear-to-br from-slate-50 to-slate-200 flex items-center justify-center">
-                                    <span className="text-slate-300">
-                                        {item.category === 'Menswear' ? (
-                                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                        ) : (
-                                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                                        )}
-                                    </span>
-                                </div>
-                                {item.images && item.images.length > 0 && (
-                                    <img src={item.images[0]} className="absolute inset-0 w-full h-full object-cover" alt={item.title} />
+                                {item.images && item.images.length > 0 && item.images[0] ? (
+                                    <>
+                                        <img
+                                            key={`desktop-img-${item._id}`}
+                                            src={item.images[0]}
+                                            className="absolute inset-0 w-full h-full object-cover z-10"
+                                            alt={item.title}
+                                            onError={(e) => {
+                                                console.error('Desktop image load error for:', item.images[0]);
+                                                e.target.style.display = 'none';
+                                            }}
+                                        />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-2 text-center z-20">
+                                            <h3 className="text-white text-sm font-bold mb-1">{item.title}</h3>
+                                            <p className="text-white/80 text-xs font-medium">{item.price}</p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="w-full h-full bg-linear-to-br from-slate-50 to-slate-200 flex items-center justify-center">
+                                        <span className="text-slate-300">
+                                            {item.category === 'Menswear' ? (
+                                                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                            ) : (
+                                                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                                            )}
+                                        </span>
+                                    </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-2 text-center">
-                                    <h3 className="text-white text-sm font-bold mb-1">{item.title}</h3>
-                                    <p className="text-white/80 text-xs font-medium">{item.price}</p>
-                                </div>
                             </Link>
                         ))}
                     </div>
@@ -449,7 +478,7 @@ const TailorProfile = () => {
 
             {/* 2. Full Screen Post Editor Modal (Responsive) */}
             {showPostModal && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center">
+                <div className="fixed inset-0 z-80 flex items-center justify-center">
                     {/* Backdrop */}
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowPostModal(false)}></div>
 
@@ -548,7 +577,7 @@ const TailorProfile = () => {
             {/* Image Preview Modal (Lightbox) */}
             {previewImage && (
                 <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in"
+                    className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in"
                     onClick={() => setPreviewImage(null)}
                 >
                     <button
