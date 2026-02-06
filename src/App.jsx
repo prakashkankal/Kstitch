@@ -7,7 +7,7 @@ import TailorDashboard from './Pages/Tailor/TailorDashboard'
 import TailorOrders from './Pages/Tailor/TailorOrders'
 import TailorCustomers from './Pages/Tailor/TailorCustomers'
 import TailorReviews from './Pages/Tailor/TailorReviews'
-import TailorPortfolio from './Pages/Tailor/TailorPortfolio'
+
 import TailorProfile from './Pages/Tailor/TailorProfile'
 import TailorSettings from './Pages/Tailor/TailorSettings'
 import NewOrder from './Pages/Tailor/NewOrder'
@@ -143,11 +143,7 @@ const App = () => {
               <TailorReviews />
             </ProtectedTailorRoute>
           } />
-          <Route path="/dashboard/portfolio" element={
-            <ProtectedTailorRoute>
-              <TailorPortfolio />
-            </ProtectedTailorRoute>
-          } />
+
           <Route path="/dashboard/profile" element={
             <ProtectedTailorRoute>
               <TailorProfile />
