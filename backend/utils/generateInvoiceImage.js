@@ -39,39 +39,49 @@ export const generateInvoiceImage = async (order, tailor) => {
         ctx.fillText(address, padding, 95);
     }
 
-    // KStitch Logo Branding
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#999999';
-    ctx.font = '10px Arial';
-    ctx.fillText('GENERATED ON', width - padding, 40);
 
-    // Draw "KStitch" logo text mock
-    // Draw "KStitch" logo branding professionally
-    const logoX = width - padding - 85;
-    const logoY = 65;
+    // Load and draw KStitch logo image
+    try {
+        const { loadImage } = await import('canvas');
+        const path = await import('path');
+        const { fileURLToPath } = await import('url');
 
-    // Draw a stylish "K" icon (simulating SVG)
-    ctx.beginPath();
-    ctx.moveTo(logoX, logoY - 20);
-    ctx.lineTo(logoX, logoY + 10);
-    ctx.lineTo(logoX + 8, logoY + 10);
-    ctx.lineTo(logoX + 8, logoY + 2);
-    ctx.lineTo(logoX + 22, logoY + 10);
-    ctx.lineTo(logoX + 32, logoY + 10);
-    ctx.lineTo(logoX + 15, logoY);
-    ctx.lineTo(logoX + 32, logoY - 20);
-    ctx.lineTo(logoX + 22, logoY - 20);
-    ctx.lineTo(logoX + 8, logoY - 5);
-    ctx.lineTo(logoX + 8, logoY - 20);
-    ctx.closePath();
-    ctx.fillStyle = '#4F46E5'; // Indigo/Purple
-    ctx.fill();
+        // Get the directory of the current file
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
 
-    // Draw "KStitch" text
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 24px "Helvetica Neue", Helvetica, Arial, sans-serif';
-    ctx.fillStyle = '#333333';
-    ctx.fillText('KStitch', width - padding, 70);
+        // Build path to logo in public folder
+        const logoPath = path.join(__dirname, '..', '..', 'public', 'kstitch-logo.png');
+        const logo = await loadImage(logoPath);
+
+        // Calculate logo dimensions (maintain aspect ratio)
+        const logoMaxWidth = 180;
+        const logoMaxHeight = 70;
+        const logoAspect = logo.width / logo.height;
+
+        let logoWidth = logoMaxWidth;
+        let logoHeight = logoMaxWidth / logoAspect;
+
+        if (logoHeight > logoMaxHeight) {
+            logoHeight = logoMaxHeight;
+            logoWidth = logoMaxHeight * logoAspect;
+        }
+
+        // Draw logo at top right
+        const logoX = width - padding - logoWidth;
+        const logoY = 45;
+        ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
+    } catch (error) {
+        // Fallback: Draw text if image loading fails
+        console.error('Logo loading failed:', error);
+        ctx.textAlign = 'right';
+        ctx.font = 'italic 14px Arial';
+        ctx.fillStyle = '#B8936F';
+        ctx.fillText('powered by', width - padding, 60);
+        ctx.font = 'bold 24px Georgia, serif';
+        ctx.fillStyle = '#3D3D3D';
+        ctx.fillText('KStitch', width - padding, 85);
+    }
 
     // Title
     ctx.textAlign = 'center';
@@ -164,49 +174,121 @@ export const generateInvoiceImage = async (order, tailor) => {
 
     // --- Pricing Breakup ---
     currentY += 20;
+
+    // Calculate comprehensive pricing details
+    const totalAmount = Number(order.price || 0);
+    const advancePaid = Number(order.advancePayment || 0);
+    const discountAmount = Number(order.discountAmount ?? order.discount ?? 0);
+    const finalAmount = Math.max(0, totalAmount - discountAmount);
+    const currentPayment = Number(order.currentPaymentAmount || 0);
+    const remainingAmount = Number(order.remainingAmount ?? Math.max(0, finalAmount - advancePaid - currentPayment));
+    const paidSoFar = Math.max(0, finalAmount - remainingAmount);
+
+    // Determine payment status
+    let paymentStatusText = 'Unpaid';
+    if (order.paymentStatus === 'paid' || remainingAmount === 0) {
+        paymentStatusText = 'Paid in Full';
+    } else if (order.paymentStatus === 'partial') {
+        paymentStatusText = 'Partial Payment';
+    } else if (order.paymentStatus === 'scheduled') {
+        paymentStatusText = 'Payment Scheduled';
+    } else if (paidSoFar > 0) {
+        paymentStatusText = 'Partial Payment';
+    }
+
+    // Dynamic height based on rows needed
+    // Rows: Total Amount, Discount, Advance Paid, Total Amount Paid, Remaining Amount, Payment Status
+    // Plus 1 if currentPayment > 0
+    const rowCount = 6 + (currentPayment > 0 ? 1 : 0);
+    const breakupHeight = 60 + (rowCount * 25);
+
     ctx.strokeStyle = '#dddddd';
-    ctx.strokeRect(padding, currentY, width - 2 * padding, 160);
+    ctx.strokeRect(padding, currentY, width - 2 * padding, breakupHeight);
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#333333';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText('Pricing / Breakup', padding + 20, currentY + 30);
+    ctx.fillText('Invoice Pricing Breakup', padding + 20, currentY + 30);
 
     // Rows
-    const drawRow = (label, value, y, bold = false, blue = false) => {
+    const drawRow = (label, value, y, bold = false, color = null, highlight = false) => {
         ctx.textAlign = 'left';
-        ctx.fillStyle = bold ? '#333333' : '#999999';
-        if (blue) ctx.fillStyle = '#0066CC';
+        ctx.fillStyle = color || (bold ? '#333333' : '#666666');
         ctx.font = bold ? 'bold 14px Arial' : '14px Arial';
         ctx.fillText(label, padding + 20, y);
 
         ctx.textAlign = 'right';
+        if (highlight && remainingAmount > 0) {
+            ctx.fillStyle = '#DC2626'; // Red for pending
+        } else if (highlight && remainingAmount === 0) {
+            ctx.fillStyle = '#16A34A'; // Green for paid
+        }
         ctx.fillText(value, width - padding - 20, y);
     };
 
     let rowY = currentY + 60;
 
-    drawRow('Sub Total', `₹ ${order.price.toFixed(2)}`, rowY, true);
-    rowY += 30;
+    // Total Amount (bold and blue)
+    drawRow('Total Amount', `₹ ${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, true, '#0066CC');
+    rowY += 25;
 
-    const discount = order.discount || 0;
-    if (discount > 0) {
-        drawRow('Discount', `- ₹ ${discount.toFixed(2)}`, rowY, false);
-        rowY += 20;
+    // Discount (always show, even if 0)
+    drawRow('Discount', `- ₹ ${discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, false);
+    rowY += 25;
+
+    // Draw separator line
+    ctx.strokeStyle = '#e5e5e5';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding + 20, rowY - 5);
+    ctx.lineTo(width - padding - 20, rowY - 5);
+    ctx.stroke();
+    rowY += 5;
+
+
+
+    // Advance Paid
+    drawRow('Advance Paid', `₹ ${advancePaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, false);
+    rowY += 25;
+
+    // Current Payment (only if present)
+    if (currentPayment > 0) {
+        drawRow('Current Payment', `₹ ${currentPayment.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, false);
+        rowY += 25;
     }
 
-    const totalAmount = order.price - discount;
-    drawRow('Total Amount', `₹ ${totalAmount.toFixed(2)}`, rowY, true, true);
+    // Total Amount Paid
+    drawRow('Total Amount Paid', `₹ ${paidSoFar.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, false, '#16A34A');
+    rowY += 25;
+
+    // Draw separator line
+    ctx.strokeStyle = '#e5e5e5';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding + 20, rowY - 5);
+    ctx.lineTo(width - padding - 20, rowY - 5);
+    ctx.stroke();
+    rowY += 5;
+
+    // Remaining Amount (highlighted)
+    drawRow('Remaining Amount', `₹ ${remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, rowY, true, null, true);
     rowY += 30;
 
-    const received = order.advancePayment || 0;
-    const balance = Math.max(0, totalAmount - received);
-    drawRow('Received Amount', `₹ ${received.toFixed(2)}`, rowY, false);
-    rowY += 20;
-    drawRow('Transaction Balance', `₹ ${balance.toFixed(2)}`, rowY, false);
+    // Payment Status
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px Arial';
+    ctx.fillText('Payment Status:', padding + 20, rowY);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = remainingAmount === 0 ? '#16A34A' : (paymentStatusText === 'Payment Scheduled' ? '#F59E0B' : '#DC2626');
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText(paymentStatusText, width - padding - 20, rowY);
+
+    currentY += breakupHeight;
 
     // --- Footer ---
-    currentY += 190;
+    currentY += 30;
 
     // Terms
     ctx.textAlign = 'left';

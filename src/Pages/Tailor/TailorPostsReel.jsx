@@ -108,11 +108,26 @@ const TailorPostsReel = () => {
                     <div key={index} className="h-full w-full snap-start relative flex items-center justify-center bg-black">
                         {/* Image */}
                         <div className="w-full h-full flex items-center justify-center">
-                            <img
-                                src={post.images?.[0] || post.image || post}
-                                alt={post.title || "Post"}
-                                className="max-w-full max-h-full object-contain"
-                            />
+                            {post.images?.[0] || post.image || post ? (
+                                <img
+                                    src={post.images?.[0] || post.image || post}
+                                    alt={post.title || "Post"}
+                                    className="max-w-full max-h-full object-contain"
+                                    onError={(e) => {
+                                        console.error('Failed to load image:', post.images?.[0] || post.image || post);
+                                        console.log('Full post object:', post);
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                />
+                            ) : null}
+                            <div className="hidden flex-col items-center text-white/70">
+                                <svg className="w-20 h-20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-sm">Image not available</p>
+                                <p className="text-xs text-white/50 mt-1">{post.title || 'No title'}</p>
+                            </div>
                         </div>
 
                         {/* Top Right Actions */}

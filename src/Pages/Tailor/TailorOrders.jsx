@@ -10,6 +10,7 @@ const TailorOrders = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState('All');
+    const [selectedDateRange, setSelectedDateRange] = useState('all');
     const [openMenuId, setOpenMenuId] = useState(null);
 
     useEffect(() => {
@@ -38,7 +39,8 @@ const TailorOrders = () => {
             try {
                 setLoading(true);
                 setError(null);
-                const response = await fetch(`${API_URL}/api/orders/${tailorData._id}`);
+                // Fetch a larger dataset so status filters (like Cancelled) are accurate.
+                const response = await fetch(`${API_URL}/api/orders/${tailorData._id}?limit=1000`);
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch orders');
@@ -66,22 +68,136 @@ const TailorOrders = () => {
         setTailorData(updatedData);
     };
 
+    const isPayLaterOrder = (order) => {
+        const remaining = Number(order?.remainingAmount || 0);
+        const status = order?.paymentStatus;
+
+        // Pay Later should show only orders that still have unpaid due amount.
+        if (remaining <= 0 || status === 'paid') return false;
+
+        return Boolean(order?.payLaterEnabled) ||
+            status === 'scheduled' ||
+            status === 'partial' ||
+            Boolean(order?.payLaterDate);
+    };
+
+    const FILTER_OPTIONS = [
+        'All',
+        'Pay Later',
+        'Payment Completed',
+        'Order Created',
+        'Cutting Completed',
+        'Order Completed',
+        'Cancelled',
+        'Delivered',
+        'Remaining'
+    ];
+
+    const DATE_RANGE_OPTIONS = [
+        { label: 'All Time', value: 'all' },
+        { label: 'Last 15 Days', value: '15d' },
+        { label: 'Last 1 Month', value: '1m' },
+        { label: 'Last 2 Months', value: '2m' },
+        { label: 'Last 3 Months', value: '3m' },
+        { label: 'Last 6 Months', value: '6m' },
+        { label: 'Last 1 Year', value: '1y' }
+    ];
+
+    const hasAnyRemainingDue = (order) => {
+        const remainingAmount = Number(order?.remainingAmount || 0);
+        const payLaterAmount = Number(order?.payLaterAmount || 0);
+        const total = Number(order?.price || 0);
+        const advance = Number(order?.advancePayment || 0);
+        const discount = Number(order?.discountAmount ?? order?.discount ?? 0);
+        const currentPaid = Number(order?.currentPaymentAmount || 0);
+        const computedRemaining = Math.max(0, total - advance - discount - currentPaid);
+        const paymentStatus = order?.paymentStatus;
+
+        return (
+            remainingAmount > 0 ||
+            payLaterAmount > 0 ||
+            computedRemaining > 0 ||
+            paymentStatus === 'partial' ||
+            paymentStatus === 'scheduled' ||
+            paymentStatus === 'unpaid'
+        ) && paymentStatus !== 'paid';
+    };
+
+    const matchesFilter = (order, filter) => {
+        if (filter === 'All') return true;
+        if (filter === 'Pay Later') return isPayLaterOrder(order);
+        if (filter === 'Remaining') return hasAnyRemainingDue(order);
+        if (filter === 'Cancelled') return order.status === 'Cancelled' || order.status === 'Canceled';
+        return order.status === filter;
+    };
+
+    const matchesDateRange = (order, selectedRange) => {
+        if (selectedRange === 'all') return true;
+
+        const orderDate = new Date(order.createdAt);
+        if (Number.isNaN(orderDate.getTime())) return false;
+
+        const now = new Date();
+        let fromDate = new Date(now);
+
+        if (selectedRange === '15d') {
+            fromDate.setDate(now.getDate() - 15);
+        } else if (selectedRange === '1m') {
+            fromDate.setMonth(now.getMonth() - 1);
+        } else if (selectedRange === '2m') {
+            fromDate.setMonth(now.getMonth() - 2);
+        } else if (selectedRange === '3m') {
+            fromDate.setMonth(now.getMonth() - 3);
+        } else if (selectedRange === '6m') {
+            fromDate.setMonth(now.getMonth() - 6);
+        } else if (selectedRange === '1y') {
+            fromDate.setFullYear(now.getFullYear() - 1);
+        }
+
+        return orderDate >= fromDate && orderDate <= now;
+    };
+
     // Calculate stats from orders
     const stats = {
         total: orders.length,
         orderCreated: orders.filter(o => o.status === 'Order Created').length,
         cuttingCompleted: orders.filter(o => o.status === 'Cutting Completed').length,
-        orderCompleted: orders.filter(o => o.status === 'Order Completed').length,
-        // Legacy statuses
-        inProgress: orders.filter(o => o.status === 'In Progress').length,
-        completed: orders.filter(o => o.status === 'Completed').length,
-        pending: orders.filter(o => o.status === 'Pending').length,
+        paymentCompleted: orders.filter(o => o.status === 'Payment Completed').length,
+        payLater: orders.filter(isPayLaterOrder).length
     };
 
-    // Filter orders by status
-    const filteredOrders = selectedStatus === 'All'
-        ? orders
-        : orders.filter(order => order.status === selectedStatus);
+    // Filter orders by status / payment mode
+    const filteredOrders = orders.filter(
+        (order) => matchesFilter(order, selectedStatus) && matchesDateRange(order, selectedDateRange)
+    );
+
+    const getOrderStatusLabel = (order) => {
+        if (isPayLaterOrder(order)) return 'Pay Later';
+        return order.status;
+    };
+
+    const getOrderStatusBadgeClass = (order) => {
+        if (isPayLaterOrder(order)) {
+            return 'bg-orange-100 text-orange-700 border border-orange-200';
+        }
+
+        switch (order.status) {
+            case 'Order Created':
+                return 'bg-amber-100 text-amber-700';
+            case 'Cutting Completed':
+                return 'bg-blue-100 text-blue-700';
+            case 'Order Completed':
+                return 'bg-emerald-100 text-emerald-700';
+            case 'Payment Completed':
+                return 'bg-indigo-100 text-indigo-700';
+            case 'Delivered':
+                return 'bg-slate-100 text-slate-700 border border-slate-200';
+            case 'Cancelled':
+                return 'bg-red-100 text-red-700';
+            default:
+                return 'bg-slate-100 text-slate-700';
+        }
+    };
 
     // Format date
     const formatDate = (dateString) => {
@@ -184,39 +300,63 @@ const TailorOrders = () => {
 
             {/* Main Content */}
             <main className="flex-1 lg:ml-72 p-3 pb-24 md:p-6 lg:p-8 dashboard-main-mobile min-w-0">
-                <header className="mb-6 md:mb-8">
-                    <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-800 mb-1 md:mb-2">Orders</h1>
-                    <p className="text-sm md:text-base text-slate-500">Manage all your customer orders</p>
+                <header className="mb-6 md:mb-8 flex items-start justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-serif font-bold text-slate-800 mb-1 md:mb-2">Orders</h1>
+                        <p className="text-sm md:text-base text-slate-500">Manage all your customer orders</p>
+                    </div>
+                    <div className="shrink-0">
+                        <label className="block text-[11px] md:text-xs font-semibold text-slate-500 mb-1">
+                            Sort by Time
+                        </label>
+                        <select
+                            value={selectedDateRange}
+                            onChange={(e) => setSelectedDateRange(e.target.value)}
+                            aria-label="Sort orders by time range"
+                            style={{ color: '#334155', WebkitTextFillColor: '#334155' }}
+                            className="h-12 md:h-12 min-w-[120px] md:min-w-[168px] rounded-lg border border-slate-300 bg-white px-2 pr-6 md:px-3 md:pr-8 text-xs md:text-sm leading-5 font-medium text-slate-700 outline-none focus:ring-2 focus:ring-[#6b4423]/20 focus:border-[#6b4423]"
+                        >
+                            {DATE_RANGE_OPTIONS.map((range) => (
+                                <option key={range.value} value={range.value}>
+                                    {range.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </header>
 
                 {/* Stats Cards - Synced for Mobile & Desktop */}
-                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 md:gap-6 mb-6 md:mb-8">
+                <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-2 md:gap-4 mb-6 md:mb-8">
                     <div className="bg-white border border-slate-200 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm">
                         <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Total</p>
                         <p className="text-xl md:text-3xl font-bold text-slate-900">{stats.total}</p>
                     </div>
                     <div className="bg-white border border-slate-200 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm">
-                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Drafts</p>
-                        <p className="text-xl md:text-3xl font-bold text-amber-600">{stats.orderCreated + stats.inProgress}</p>
+                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Order Created</p>
+                        <p className="text-xl md:text-3xl font-bold text-amber-600">{stats.orderCreated}</p>
                     </div>
                     <div className="bg-white border border-slate-200 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm">
-                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Stitching</p>
+                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Cutting Done</p>
                         <p className="text-xl md:text-3xl font-bold text-blue-600">{stats.cuttingCompleted}</p>
                     </div>
                     <div className="bg-white border border-slate-200 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm">
-                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Ready</p>
-                        <p className="text-xl md:text-3xl font-bold text-emerald-600">{stats.orderCompleted + stats.completed}</p>
+                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Payment Done</p>
+                        <p className="text-xl md:text-3xl font-bold text-indigo-600">{stats.paymentCompleted}</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm">
+                        <p className="text-slate-500 text-[10px] md:text-sm font-medium mb-0.5 md:mb-1 uppercase tracking-wider md:normal-case">Pay Later</p>
+                        <p className="text-xl md:text-3xl font-bold text-orange-600">{stats.payLater}</p>
                     </div>
                 </div>
 
                 {/* Status Filters - Redesigned for Mobile (Horizontal Pills) */}
                 <div className="mb-6 overflow-x-auto no-scrollbar pb-2">
                     <div className="flex gap-2 min-w-max md:flex-wrap md:min-w-0">
-                        {['All', 'Order Created', 'Cutting Completed', 'Stitching', 'Order Completed', 'Delivered'].map((status) => (
+                        {FILTER_OPTIONS.map((status) => (
                             <button
                                 key={status}
-                                onClick={() => setSelectedStatus(status === 'Stitching' ? 'Cutting Completed' : status)}
-                                className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap ${(selectedStatus === status || (status === 'Stitching' && selectedStatus === 'Cutting Completed'))
+                                onClick={() => setSelectedStatus(status)}
+                                className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all whitespace-nowrap ${selectedStatus === status
                                     ? 'bg-[#6b4423] text-white shadow-md'
                                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                                     }`}
@@ -260,8 +400,8 @@ const TailorOrders = () => {
                             <p className="text-slate-800 font-bold text-lg">No orders yet</p>
                             <p className="text-slate-500 text-sm">
                                 {selectedStatus === 'All'
-                                    ? 'Orders will appear here once customers place them.'
-                                    : `No ${selectedStatus.toLowerCase()} orders found.`}
+                                    ? `No orders found for ${(DATE_RANGE_OPTIONS.find((opt) => opt.value === selectedDateRange)?.label || 'selected range').toLowerCase()}.`
+                                    : `No ${selectedStatus.toLowerCase()} orders found for ${(DATE_RANGE_OPTIONS.find((opt) => opt.value === selectedDateRange)?.label || 'selected range').toLowerCase()}.`}
                             </p>
                         </div>
                     ) : (
@@ -320,13 +460,8 @@ const TailorOrders = () => {
 
                                             {/* Center: Status & Due Date */}
                                             <div className="flex flex-col items-center min-w-[100px] px-2">
-                                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold mb-1 whitespace-nowrap ${order.status === 'Order Completed' ? 'bg-emerald-100 text-emerald-700' :
-                                                    order.status === 'Cutting Completed' ? 'bg-blue-100 text-blue-700' :
-                                                        order.status === 'Order Created' ? 'bg-amber-100 text-amber-700' :
-                                                            order.status === 'Delivered' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
-                                                                'bg-slate-100 text-slate-700'
-                                                    }`}>
-                                                    {order.status === 'Cutting Completed' ? 'Stitching' : order.status}
+                                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold mb-1 whitespace-nowrap ${getOrderStatusBadgeClass(order)}`}>
+                                                    {getOrderStatusLabel(order)}
                                                 </span>
                                                 <span className={`text-xs ${dateClass} text-center`}>
                                                     {dateText.replace(/ \(.*\)/, '')}
@@ -415,16 +550,8 @@ const TailorOrders = () => {
                                                 <td className="px-6 py-4 text-sm text-slate-600">{order.customerPhone}</td>
                                                 <td className="px-6 py-4 text-sm text-slate-700">{order.orderType}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${order.status === 'Order Completed' ? 'bg-emerald-100 text-emerald-700' :
-                                                        order.status === 'Cutting Completed' ? 'bg-blue-100 text-blue-700' :
-                                                            order.status === 'Order Created' ? 'bg-amber-100 text-amber-700' :
-                                                                order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
-                                                                    order.status === 'In Progress' ? 'bg-amber-100 text-amber-700' :
-                                                                        order.status === 'Delivered' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
-                                                                            order.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                                                                'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                        {order.status === 'Cutting Completed' ? 'Stitching' : order.status}
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getOrderStatusBadgeClass(order)}`}>
+                                                        {getOrderStatusLabel(order)}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-600">

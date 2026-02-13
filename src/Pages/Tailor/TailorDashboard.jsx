@@ -51,14 +51,16 @@ const TailorDashboard = () => {
             today.setHours(0, 0, 0, 0);
 
             const dueToday = orders.filter(order => {
-                if (!order.dueDate || order.status === 'Order Completed') return false;
+                if (!order.dueDate) return false;
+                if (order.status === 'Delivered' || order.deliveredAt) return false;
                 const dueDate = new Date(order.dueDate);
                 dueDate.setHours(0, 0, 0, 0);
                 return dueDate.getTime() === today.getTime();
             }).length;
 
             const overdue = orders.filter(order => {
-                if (!order.dueDate || order.status === 'Order Completed') return false;
+                if (!order.dueDate) return false;
+                if (order.status === 'Delivered' || order.deliveredAt) return false;
                 const dueDate = new Date(order.dueDate);
                 dueDate.setHours(0, 0, 0, 0);
                 return dueDate.getTime() < today.getTime();

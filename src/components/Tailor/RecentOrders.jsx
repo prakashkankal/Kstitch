@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import ReactDOM from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import API_URL from '../../config/api'
+import SwipeToRemoveOrderCard from './SwipeToRemoveOrderCard'
+
+// LocalStorage key for hidden orders
+const HIDDEN_ORDERS_KEY = 'recent_hidden_order_ids';
 
 const RecentOrders = ({ tailorId }) => {
     const navigate = useNavigate();
@@ -10,18 +15,57 @@ const RecentOrders = ({ tailorId }) => {
     const [error, setError] = useState(null);
     const [openMenuId, setOpenMenuId] = useState(null);
 
+    // Hidden orders state with localStorage persistence
+    const [hiddenOrderIds, setHiddenOrderIds] = useState(() => {
+        try {
+            const stored = localStorage.getItem(HIDDEN_ORDERS_KEY);
+            return stored ? new Set(JSON.parse(stored)) : new Set();
+        } catch (e) {
+            console.error('Error loading hidden orders:', e);
+            return new Set();
+        }
+    });
+
+    // Undo functionality
+    const [undoItem, setUndoItem] = useState(null);
+    const [showUndo, setShowUndo] = useState(false);
+    const undoTimeoutRef = React.useRef(null);
+
     const fetchOrders = async () => {
         if (!tailorId) return;
 
         try {
             setLoading(true);
-            // Fetch recent 20 orders, excluding Cancelled and Delivered
-            const { data } = await axios.get(`${API_URL}/api/orders/${tailorId}?limit=20&excludeStatus=Cancelled,Delivered`);
+            // Fetch recent orders, excluding only Cancelled
+            // Include Delivered to check payment status
+            const { data } = await axios.get(`${API_URL}/api/orders/${tailorId}?limit=20&excludeStatus=Cancelled`);
             const allOrders = data.orders || [];
 
-            // Filter Drafts
-            const draftOrders = allOrders.filter(o => o.status === 'Draft');
-            const otherOrders = allOrders.filter(o => o.status !== 'Draft');
+            // Filter logic: Keep orders with pending payment OR not delivered yet
+            const filteredOrders = allOrders.filter(order => {
+                // Always show drafts
+                if (order.status === 'Draft') return true;
+
+                // Show if not delivered yet
+                if (order.status !== 'Delivered') return true;
+
+                // For delivered orders, check payment status
+                const paymentStatus = order.paymentStatus || 'unpaid';
+                const remainingAmount = order.remainingAmount || 0;
+
+                // Keep if payment is not complete
+                // Payment is complete only when status is 'paid' and remainingAmount is 0
+                if (paymentStatus !== 'paid' || remainingAmount > 0) {
+                    return true;
+                }
+
+                // Hide fully paid delivered orders
+                return false;
+            });
+
+            // Separate drafts and put them at top
+            const draftOrders = filteredOrders.filter(o => o.status === 'Draft');
+            const otherOrders = filteredOrders.filter(o => o.status !== 'Draft');
 
             // Combine: Drafts at top, then others (already sorted by createdAt desc from backend)
             setOrders([...draftOrders, ...otherOrders]);
@@ -34,6 +78,75 @@ const RecentOrders = ({ tailorId }) => {
             setLoading(false);
         }
     };
+
+    // Handle removing order from Recent tab
+    const handleRemoveFromRecent = (orderId) => {
+        // Find the order for undo
+        const removedOrder = orders.find(o => o._id === orderId);
+        if (!removedOrder) return;
+
+        // Clear any existing undo timeout
+        if (undoTimeoutRef.current) {
+            clearTimeout(undoTimeoutRef.current);
+        }
+
+        // Update hidden orders
+        const newHiddenIds = new Set(hiddenOrderIds);
+        newHiddenIds.add(orderId);
+        setHiddenOrderIds(newHiddenIds);
+
+        // Persist to localStorage
+        try {
+            localStorage.setItem(HIDDEN_ORDERS_KEY, JSON.stringify(Array.from(newHiddenIds)));
+        } catch (e) {
+            console.error('Error saving hidden orders:', e);
+        }
+
+        // Show undo toast
+        setUndoItem(removedOrder);
+        setShowUndo(true);
+
+        // Auto-hide undo toast after 5 seconds
+        undoTimeoutRef.current = setTimeout(() => {
+            setShowUndo(false);
+            setUndoItem(null);
+        }, 5000);
+    };
+
+    // Handle undo action
+    const handleUndo = () => {
+        if (!undoItem) return;
+
+        // Clear timeout
+        if (undoTimeoutRef.current) {
+            clearTimeout(undoTimeoutRef.current);
+        }
+
+        // Restore order
+        const newHiddenIds = new Set(hiddenOrderIds);
+        newHiddenIds.delete(undoItem._id);
+        setHiddenOrderIds(newHiddenIds);
+
+        // Persist to localStorage
+        try {
+            localStorage.setItem(HIDDEN_ORDERS_KEY, JSON.stringify(Array.from(newHiddenIds)));
+        } catch (e) {
+            console.error('Error saving hidden orders:', e);
+        }
+
+        // Hide undo toast
+        setShowUndo(false);
+        setUndoItem(null);
+    };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (undoTimeoutRef.current) {
+                clearTimeout(undoTimeoutRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         fetchOrders();
@@ -98,14 +211,64 @@ const RecentOrders = ({ tailorId }) => {
         }
     };
 
-    const getNextAction = (status) => {
+    const getPaymentStatusInfo = (order) => {
+        const paymentStatus = order.paymentStatus || 'unpaid';
+        const remainingAmount = order.remainingAmount || 0;
+        const payLaterDate = order.payLaterDate;
+
+        // Fully paid - no display needed
+        if (paymentStatus === 'paid' && remainingAmount === 0) {
+            return null;
+        }
+
+        // Has pending payment
+        if (remainingAmount > 0) {
+            let statusText = '';
+            let badgeClass = '';
+
+            if (paymentStatus === 'unpaid') {
+                statusText = 'Payment Due';
+                badgeClass = 'bg-red-100 text-red-700 border-red-300';
+            } else if (paymentStatus === 'partial') {
+                statusText = 'Partial Payment';
+                badgeClass = 'bg-amber-100 text-amber-700 border-amber-300';
+            } else if (paymentStatus === 'scheduled') {
+                statusText = 'Payment Scheduled';
+                badgeClass = 'bg-blue-100 text-blue-700 border-blue-300';
+            } else {
+                statusText = 'Payment Pending';
+                badgeClass = 'bg-orange-100 text-orange-700 border-orange-300';
+            }
+
+            return {
+                hasPaymentDue: true,
+                statusText,
+                badgeClass,
+                remainingAmount,
+                payLaterDate,
+                formattedAmount: `₹${remainingAmount.toFixed(2)}`
+            };
+        }
+
+        return null;
+    };
+
+    const getNextAction = (status, order) => {
+        // Check if payment is due first
+        const paymentInfo = getPaymentStatusInfo(order);
+        if (paymentInfo && paymentInfo.hasPaymentDue) {
+            return 'Collect Payment';
+        }
+
         switch (status) {
             case 'Order Created':
                 return 'Cut Cloth';
             case 'Cutting Completed':
                 return 'Stitch & Complete';
             case 'Order Completed':
-                return 'Ready for Pickup';
+                return 'Process Payment';
+            case 'Payment Completed':
+                return 'Ready for Delivery';
             default:
                 return '-';
         }
@@ -116,6 +279,7 @@ const RecentOrders = ({ tailorId }) => {
             'Order Created': 'bg-yellow-100 text-yellow-700 border border-yellow-300',
             'Cutting Completed': 'bg-blue-100 text-blue-700 border border-blue-300',
             'Order Completed': 'bg-green-100 text-green-700 border border-green-300',
+            'Payment Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-300',
             'Pending': 'bg-amber-100 text-amber-700 border border-amber-300',
             'In Progress': 'bg-blue-100 text-blue-700 border border-blue-300',
             'Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-300',
@@ -125,6 +289,33 @@ const RecentOrders = ({ tailorId }) => {
         };
 
         return badges[status] || 'bg-slate-100 text-slate-700 border border-slate-300';
+    };
+
+    const getRecentStatusMeta = (order) => {
+        const paymentInfo = getPaymentStatusInfo(order);
+
+        // Highest priority: if any payment is pending, show this as badge status.
+        if (paymentInfo && paymentInfo.hasPaymentDue) {
+            return {
+                label: 'Payment Remaining',
+                className: 'bg-red-100 text-red-700 border border-red-300'
+            };
+        }
+
+        switch (order.status) {
+            case 'Order Created':
+                return { label: 'Cutting', className: getStatusBadge(order.status) };
+            case 'Cutting Completed':
+                return { label: 'Cutting Done', className: getStatusBadge(order.status) };
+            case 'Order Completed':
+                return { label: 'Order Complete', className: getStatusBadge(order.status) };
+            case 'Payment Completed':
+                return { label: 'Payment Completed', className: getStatusBadge(order.status) };
+            case 'Delivered':
+                return { label: 'Order Delivered', className: getStatusBadge(order.status) };
+            default:
+                return { label: order.status, className: getStatusBadge(order.status) };
+        }
     };
 
     const handleCardClick = (order) => {
@@ -164,18 +355,77 @@ const RecentOrders = ({ tailorId }) => {
         return cleaned;
     };
 
-    const handleSendInvoice = (order) => {
+    const handleSendInvoice = async (order) => {
         if (!order?.customerPhone) return;
         const phone = formatPhoneNumber(order.customerPhone);
 
+        // Copy phone number to clipboard for easy pasting in WhatsApp
+        try {
+            await navigator.clipboard.writeText(phone);
+            // Show brief notification
+            const toast = document.createElement('div');
+            toast.textContent = `📋 Phone copied: ${phone}`;
+            toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium z-[9999] animate-fade-in';
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'transition-opacity');
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 2000);
+        } catch (err) {
+            console.log('Clipboard copy failed:', err);
+        }
+
         if (isImageInvoiceStatus(order.status)) {
-            const invoiceLink = getInvoiceImageLink(order._id);
-            const message = `Hello ${order.customerName},\n\n` +
-                `Your invoice image is ready.\n` +
-                `View invoice: ${invoiceLink}\n\n` +
-                `Thank you,\nKStitch`;
-            const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-            window.open(whatsappUrl, '_blank');
+            try {
+                // Fetch the invoice image as a blob
+                const invoiceImageUrl = `${API_URL}/api/orders/${order._id}/invoice-jpg`;
+                const response = await fetch(invoiceImageUrl);
+                const blob = await response.blob();
+
+                // Create a file from the blob
+                const fileName = `Invoice_${order._id.slice(-6).toUpperCase()}_${order.customerName.replace(/\s+/g, '_')}.jpg`;
+                const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+                // Check if Web Share API is available (mobile devices)
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                    // Try Web Share API first for automatic attachment
+                    try {
+                        await navigator.share({
+                            files: [file]
+                        });
+                        // If user successfully shares, we're done!
+                        return;
+                    } catch (shareError) {
+                        // If user cancels share sheet, fall through to direct WhatsApp opening
+                        if (shareError.name === 'AbortError') {
+                            console.log('User cancelled share, opening WhatsApp directly...');
+                        } else {
+                            throw shareError;
+                        }
+                    }
+                }
+
+                // Fallback OR after share cancellation: Download and open WhatsApp directly with customer contact
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // Short delay to ensure download starts
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Open WhatsApp directly with customer contact (no pre-filled message)
+                const whatsappUrl = `https://wa.me/${phone}`;
+                window.open(whatsappUrl, '_blank');
+
+            } catch (error) {
+                console.error('Error sharing invoice:', error);
+                alert('Failed to share invoice. Please try again.');
+            }
             return;
         }
 
@@ -190,11 +440,8 @@ const RecentOrders = ({ tailorId }) => {
             return;
         }
 
-        if (!order?.customerPhone) return;
-        const phone = formatPhoneNumber(order.customerPhone);
         const message = buildTextInvoiceMessage(order);
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+        alert(message);
     };
 
     const handleCancelOrder = async (orderId) => {
@@ -269,6 +516,9 @@ const RecentOrders = ({ tailorId }) => {
                     <div className="hidden md:grid md:p-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                         {orders.map((order) => {
                             const dueDateInfo = getDueDateDisplay(order.dueDate);
+                            const paymentInfo = getPaymentStatusInfo(order);
+                            const statusMeta = getRecentStatusMeta(order);
+
                             return (
                                 <div
                                     key={order._id}
@@ -286,10 +536,33 @@ const RecentOrders = ({ tailorId }) => {
                                                 </h4>
                                                 <p className="text-sm text-slate-500 mt-0.5">{order.orderType}</p>
                                             </div>
-                                            <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${getStatusBadge(order.status)}`}>
-                                                {order.status === 'Cutting Completed' ? 'Stitching' : order.status}
+                                            <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${statusMeta.className}`}>
+                                                {statusMeta.label}
                                             </span>
                                         </div>
+
+                                        {/* Payment Due Alert - Prominent Position */}
+                                        {paymentInfo && paymentInfo.hasPaymentDue && (
+                                            <div className="mb-4 bg-red-50 border-2 border-red-200 rounded-xl p-3">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${paymentInfo.badgeClass}`}>
+                                                        {paymentInfo.statusText}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-xs text-slate-600 font-medium">Remaining:</span>
+                                                    <span className="text-lg font-bold text-red-700">{paymentInfo.formattedAmount}</span>
+                                                </div>
+                                                {paymentInfo.payLaterDate && (
+                                                    <div className="mt-2 pt-2 border-t border-red-200">
+                                                        <span className="text-xs text-slate-600">Due: </span>
+                                                        <span className="text-xs font-semibold text-red-600">
+                                                            {formatDate(paymentInfo.payLaterDate)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* Card Body - Customer & Details */}
                                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -300,7 +573,7 @@ const RecentOrders = ({ tailorId }) => {
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Next Action</p>
                                                 <p className="text-sm font-semibold text-slate-700">
-                                                    {getNextAction(order.status)}
+                                                    {getNextAction(order.status, order)}
                                                 </p>
                                             </div>
                                         </div>
@@ -386,6 +659,16 @@ const RecentOrders = ({ tailorId }) => {
                                                                 Cancel Order
                                                             </button>
                                                         )}
+                                                        <div className="my-1 border-t border-slate-100"></div>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleRemoveFromRecent(order._id);
+                                                                setOpenMenuId(null);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-red-50 text-red-600"
+                                                        >
+                                                            Remove from Recent
+                                                        </button>
                                                     </div>
                                                 )}
                                             </>
@@ -396,141 +679,182 @@ const RecentOrders = ({ tailorId }) => {
                         })}
                     </div>
 
-                    {/* Mobile View: Compact List Layout */}
+                    {/* Mobile View: Compact List Layout with Swipe-to-Remove */}
                     <div className="md:hidden flex flex-col divide-y divide-gray-100 bg-white rounded-b-3xl relative">
-                        {orders.map((order) => {
+                        {orders.filter(order => !hiddenOrderIds.has(order._id)).map((order) => {
                             const dueDateInfo = getDueDateDisplay(order.dueDate);
+                            const paymentInfo = getPaymentStatusInfo(order);
+                            const statusMeta = getRecentStatusMeta(order);
+
                             return (
-                                <div
+                                <SwipeToRemoveOrderCard
                                     key={order._id}
-                                    onClick={() => handleCardClick(order)}
-                                    className="flex items-center justify-between p-2 active:bg-slate-50 transition-colors cursor-pointer min-h-[60px]"
+                                    order={order}
+                                    onRemove={handleRemoveFromRecent}
+                                    onUndo={handleUndo}
                                 >
-                                    {/* Left: Customer & ID */}
-                                    <div className="flex flex-col min-w-0 flex-1 pr-2">
-                                        <p className="text-sm font-bold text-slate-800 truncate mb-0.5">
-                                            {order.customerName}
-                                        </p>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] font-medium text-slate-500">
-                                                #{order._id.slice(-6).toUpperCase()}
+                                    <div
+                                        onClick={() => handleCardClick(order)}
+                                        className={`flex items-center justify-between p-2 active:bg-slate-50 transition-colors cursor-pointer min-h-[60px] ${openMenuId === order._id ? 'z-[80] relative' : ''}`}
+                                    >
+                                        {/* Left: Customer & ID */}
+                                        <div className="flex flex-col min-w-0 flex-1 pr-2">
+                                            <p className="text-sm font-bold text-slate-800 truncate mb-0.5">
+                                                {order.customerName}
+                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[10px] font-medium text-slate-500">
+                                                    #{order._id.slice(-6).toUpperCase()}
+                                                </span>
+                                                {/* Payment Due Badge - Mobile */}
+                                                {paymentInfo && paymentInfo.hasPaymentDue && (
+                                                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold border ${paymentInfo.badgeClass}`}>
+                                                        {paymentInfo.formattedAmount}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Center: Status & Due Date */}
+                                        <div className="flex flex-col items-center px-1.5 shrink-0">
+                                            <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold mb-0.5 whitespace-nowrap ${statusMeta.className}`}>
+                                                {statusMeta.label}
+                                            </span>
+                                            <span className={`text-[10px] font-semibold ${dueDateInfo.className} text-center leading-tight`}>
+                                                {dueDateInfo.text.replace(/ \\(.*\\)/, '')}
+                                                {dueDateInfo.text.includes('overdue') && <span className="block text-[9px] font-extrabold text-red-600">Overdue</span>}
+                                                {dueDateInfo.text.includes('Today') && <span className="block text-[9px] font-extrabold text-orange-600">Today</span>}
+                                                {dueDateInfo.text.includes('left') && <span className="block text-[9px] font-semibold text-amber-600">{dueDateInfo.text.match(/\\d+d left/)?.[0]}</span>}
                                             </span>
                                         </div>
-                                    </div>
 
-                                    {/* Center: Status & Due Date */}
-                                    <div className="flex flex-col items-center px-1.5 shrink-0">
-                                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold mb-0.5 whitespace-nowrap ${getStatusBadge(order.status)}`}>
-                                            {order.status === 'Cutting Completed' ? 'Stitching' : order.status === 'Order Created' ? 'Cutting' : order.status}
-                                        </span>
-                                        <span className={`text-[10px] font-semibold ${dueDateInfo.className} text-center leading-tight`}>
-                                            {dueDateInfo.text.replace(/ \\(.*\\)/, '')}
-                                            {dueDateInfo.text.includes('overdue') && <span className="block text-[9px] font-extrabold text-red-600">Overdue</span>}
-                                            {dueDateInfo.text.includes('Today') && <span className="block text-[9px] font-extrabold text-orange-600">Today</span>}
-                                            {dueDateInfo.text.includes('left') && <span className="block text-[9px] font-semibold text-amber-600">{dueDateInfo.text.match(/\\d+d left/)?.[0]}</span>}
-                                        </span>
-                                    </div>
-
-                                    {/* Right: Actions Menu */}
-                                    <div
-                                        className="pl-1.5 shrink-0"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Only stop prop for action clicks, not the container
-                                        }}
-                                    >
-                                        <div className="relative flex items-center gap-1.5">
-                                            {order.customerPhone && (
-                                                <a
-                                                    href={`tel:${order.customerPhone}`}
-                                                    className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center hover:bg-green-200 active:scale-95 transition-all outline-none"
-                                                    aria-label="Call Customer"
-                                                >
-                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                                    </svg>
-                                                </a>
-                                            )}
-                                            {order.status === 'Draft' ? (
-                                                <button
-                                                    onClick={(e) => handleDeleteDraft(e, order._id)}
-                                                    className="w-8 h-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center hover:bg-red-100 active:scale-95 transition-all outline-none"
-                                                    aria-label="Delete Draft"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setOpenMenuId(openMenuId === order._id ? null : order._id);
-                                                        }}
-                                                        className="w-8 h-8 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-all outline-none"
-                                                        aria-label="Order actions"
+                                        {/* Right: Actions Menu */}
+                                        <div
+                                            className="pl-1.5 shrink-0"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                // Only stop prop for action clicks, not the container
+                                            }}
+                                        >
+                                            <div className="relative flex items-center gap-1.5">
+                                                {order.customerPhone && (
+                                                    <a
+                                                        href={`tel:${order.customerPhone}`}
+                                                        className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center hover:bg-green-200 active:scale-95 transition-all outline-none"
+                                                        aria-label="Call Customer"
                                                     >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v.01M12 12v.01M12 18v.01" />
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                        </svg>
+                                                    </a>
+                                                )}
+                                                {order.status === 'Draft' ? (
+                                                    <button
+                                                        onClick={(e) => handleDeleteDraft(e, order._id)}
+                                                        className="w-8 h-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center hover:bg-red-100 active:scale-95 transition-all outline-none"
+                                                        aria-label="Delete Draft"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                         </svg>
                                                     </button>
-                                                    {openMenuId === order._id && (
-                                                        <div
-                                                            className="absolute right-0 top-10 z-60 w-44 rounded-xl border border-slate-200 bg-white shadow-lg p-1"
-                                                            onClick={(e) => e.stopPropagation()}
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setOpenMenuId(openMenuId === order._id ? null : order._id);
+                                                            }}
+                                                            className="w-8 h-8 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-all outline-none"
+                                                            aria-label="Order actions"
                                                         >
-                                                            <button
-                                                                onClick={() => {
-                                                                    handleSendInvoice(order);
-                                                                    setOpenMenuId(null);
-                                                                }}
-                                                                disabled={!order.customerPhone}
-                                                                className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50 disabled:text-slate-300"
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v.01M12 12v.01M12 18v.01" />
+                                                            </svg>
+                                                        </button>
+                                                        {openMenuId === order._id && (
+                                                            <div
+                                                                className="absolute right-0 top-10 z-[120] w-44 rounded-xl border border-slate-200 bg-white shadow-lg p-1"
+                                                                onClick={(e) => e.stopPropagation()}
                                                             >
-                                                                Send Invoice
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    handleViewInvoice(order);
-                                                                    setOpenMenuId(null);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50"
-                                                            >
-                                                                View Invoice
-                                                            </button>
-                                                            {['Delivered', 'Cancelled', 'Completed', 'Order Completed'].includes(order.status) ? (
                                                                 <button
                                                                     onClick={() => {
-                                                                        navigate(`/orders/${order._id}`);
+                                                                        handleSendInvoice(order);
+                                                                        setOpenMenuId(null);
+                                                                    }}
+                                                                    disabled={!order.customerPhone}
+                                                                    className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50 disabled:text-slate-300"
+                                                                >
+                                                                    Send Invoice
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        handleViewInvoice(order);
                                                                         setOpenMenuId(null);
                                                                     }}
                                                                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50"
                                                                 >
-                                                                    More Options
+                                                                    View Invoice
                                                                 </button>
-                                                            ) : (
+                                                                {['Delivered', 'Cancelled', 'Completed', 'Order Completed'].includes(order.status) ? (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            navigate(`/orders/${order._id}`);
+                                                                            setOpenMenuId(null);
+                                                                        }}
+                                                                        className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50"
+                                                                    >
+                                                                        More Options
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            handleCancelOrder(order._id);
+                                                                            setOpenMenuId(null);
+                                                                        }}
+                                                                        className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-red-50 text-red-600"
+                                                                    >
+                                                                        Cancel Order
+                                                                    </button>
+                                                                )}
+                                                                <div className="my-1 border-t border-slate-100"></div>
                                                                 <button
                                                                     onClick={() => {
-                                                                        handleCancelOrder(order._id);
+                                                                        handleRemoveFromRecent(order._id);
                                                                         setOpenMenuId(null);
                                                                     }}
                                                                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-red-50 text-red-600"
                                                                 >
-                                                                    Cancel Order
+                                                                    Remove from Recent
                                                                 </button>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                </SwipeToRemoveOrderCard>
                             );
                         })}
                     </div>
                 </>
+            )}
+
+            {/* Undo Toast - Fixed to viewport bottom-left */}
+            {showUndo && undoItem && ReactDOM.createPortal(
+                <div className="fixed bottom-[74px] left-2 z-[9999] md:bottom-6 md:left-6 bg-slate-800/95 text-white px-3 py-2 rounded-2xl shadow-lg flex items-center gap-2 max-w-[240px] animate-slide-up">
+                    <span className="text-[11px] leading-tight font-medium">
+                        Removed {undoItem.customerName}'s order from Recent
+                    </span>
+                    <button
+                        onClick={handleUndo}
+                        className="px-2 py-0.5 h-6 min-w-[46px] rounded-full text-[10px] font-semibold bg-white text-slate-800 hover:bg-slate-100"
+                    >
+                        UNDO
+                    </button>
+                </div>,
+                document.body
             )}
         </div>
     );

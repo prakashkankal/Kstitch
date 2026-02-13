@@ -543,31 +543,46 @@ const TailorDetailPage = () => {
                                         ))}
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                        {filteredPortfolio.map((item, idx) => (
-                                            <div
-                                                key={idx}
-                                                onClick={() => {
-                                                    navigate(`/tailor/${id}/posts`, {
-                                                        state: {
-                                                            posts: filteredPortfolio,
-                                                            initialIndex: idx
-                                                        }
-                                                    });
-                                                }}
-                                                className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative"
-                                            >
-                                                <img
-                                                    src={item.images?.[0] || item.image || item}
-                                                    alt={item.title || `Portfolio ${idx + 1}`}
-                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                                />
-                                                {item.title && (
-                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-sm">
-                                                        {item.title}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                        {filteredPortfolio.map((item, idx) => {
+                                            // Debug logging
+                                            if (idx === 0) {
+                                                console.log('Portfolio item sample:', item);
+                                                console.log('Image source:', item.images?.[0] || item.image || item);
+                                            }
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        navigate(`/tailor/${id}/posts`, {
+                                                            state: {
+                                                                posts: filteredPortfolio,
+                                                                initialIndex: idx
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative"
+                                                >
+                                                    <img
+                                                        src={item.images?.[0] || item.image || item}
+                                                        alt={item.title || `Portfolio ${idx + 1}`}
+                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                                        onError={(e) => {
+                                                            console.error('Portfolio image load failed:', {
+                                                                index: idx,
+                                                                imageSrc: item.images?.[0] || item.image || item,
+                                                                item: item
+                                                            });
+                                                            e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"%3E%3Crect fill="%23f0f0f0" width="400" height="400"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="20" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle"%3EImage Not Found%3C/text%3E%3C/svg%3E';
+                                                        }}
+                                                    />
+                                                    {item.title && (
+                                                        <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-sm">
+                                                            {item.title}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </>
                             ) : (

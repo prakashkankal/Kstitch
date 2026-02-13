@@ -29,6 +29,7 @@ const DashboardStats = ({ tailorId }) => {
                 // Calculate work-focused stats
                 const ordersDueToday = orders.filter(order => {
                     if (!order.dueDate) return false;
+                    if (order.status === 'Delivered' || order.deliveredAt) return false;
                     const dueDate = new Date(order.dueDate);
                     dueDate.setHours(0, 0, 0, 0);
                     return dueDate.getTime() === today.getTime();

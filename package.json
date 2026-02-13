@@ -25,6 +25,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
+    "framer-motion": "^12.34.0",
     "gsap": "^3.14.2",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
@@ -51,6 +52,8 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-window": "^7.4.0"
   }
 }

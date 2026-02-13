@@ -100,10 +100,40 @@ const orderSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // New Payment Flow Fields
+    paymentStatus: {
+        type: String,
+        enum: ['unpaid', 'partial', 'paid', 'scheduled'],
+        default: 'unpaid'
+    },
+    discountAmount: {
+        type: Number,
+        default: 0
+    },
+    currentPaymentAmount: {
+        type: Number,
+        default: 0
+    },
+    remainingAmount: {
+        type: Number,
+        default: 0
+    },
+    payLaterEnabled: {
+        type: Boolean,
+        default: false
+    },
+    payLaterAmount: {
+        type: Number,
+        default: 0
+    },
+    payLaterDate: {
+        type: Date,
+        required: false
+    },
     status: {
         type: String,
         required: true,
-        enum: ['Order Created', 'Cutting Completed', 'Order Completed', 'Pending', 'In Progress', 'Completed', 'Cancelled', 'Delivered', 'Draft'],
+        enum: ['Order Created', 'Cutting Completed', 'Order Completed', 'Payment Completed', 'Pending', 'In Progress', 'Completed', 'Cancelled', 'Delivered', 'Draft'],
         default: 'Order Created'
     },
     dueDate: {
@@ -122,6 +152,10 @@ const orderSchema = new mongoose.Schema({
         type: Date,
         required: false
     },
+    paymentCompletedAt: {
+        type: Date,
+        required: false
+    },
     deliveredAt: {
         type: Date,
         required: false
@@ -134,7 +168,7 @@ const orderSchema = new mongoose.Schema({
     paymentMode: {
         type: String,
         required: false,
-        enum: ['Cash', 'UPI', 'Card', 'Online', 'Other'],
+        enum: ['Cash', 'UPI', 'Card', 'Online', 'Pay Later', 'Other'],
         default: 'Cash'
     },
     isPaid: {

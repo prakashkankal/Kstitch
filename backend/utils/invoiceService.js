@@ -14,22 +14,27 @@ export const getNextInvoiceNumber = async () => {
 
 export const buildInvoiceMessage = ({ invoice, order, tailor, invoiceLink }) => {
     const dueDate = order?.dueDate
-        ? new Date(order.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        ? new Date(order.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
         : 'N/A';
 
-    const linkLine = invoiceLink ? `View Invoice: ${invoiceLink}\n\n` : '';
+    const totalAmount = Number(invoice.totalAmount || 0).toFixed(2);
+    const advanceAmount = Number(invoice.advanceAmount || 0).toFixed(2);
+    const balanceDue = Number(invoice.dueAmount || 0).toFixed(2);
 
-    return `Hello ${invoice.customerName},\n\n` +
-        `Your order has been successfully created.\n\n` +
+    return `Dear ${invoice.customerName},\n\n` +
+        `Thank you for choosing our tailoring services. Your order has been successfully created and the details are as follows:\n\n` +
         `Order ID: ${order._id.toString().slice(-6).toUpperCase()}\n` +
-        `Due Date: ${dueDate}\n` +
-        `Total Amount: ₹${invoice.totalAmount}\n` +
-        `Advance Paid: ₹${invoice.advanceAmount}\n` +
-        `Balance Due: ₹${invoice.dueAmount}\n\n` +
-        linkLine +
-        `Thank you,\n` +
-        `${tailor?.shopName || 'KStitch'}\n` +
-        `${tailor?.phone || ''}`.trim();
+        `Due Date: ${dueDate}\n\n` +
+        `Payment Summary:\n` +
+        `Total Amount: ₹${totalAmount}\n` +
+        `Advance Paid: ₹${advanceAmount}\n` +
+        `Balance Due: ₹${balanceDue}\n\n` +
+        `Kindly ensure the remaining balance is paid on or before the delivery date. If you have any questions regarding your order, feel free to contact us using the details below.\n\n` +
+        `Thank you for your trust and support.\n\n` +
+        `Best regards,\n` +
+        `${tailor?.shopName || tailor?.name || 'KStitch'}\n` +
+        `Contact: ${tailor?.phone || ''}\n\n` +
+        `Powered by KStitch`;
 };
 
 export const createInvoiceForOrder = async ({ order }) => {

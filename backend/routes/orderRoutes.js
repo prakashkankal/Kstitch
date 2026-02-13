@@ -8,6 +8,20 @@ import { buildInvoiceMessage, createInvoiceForOrder } from '../utils/invoiceServ
 
 const router = express.Router();
 
+// Normalize legacy records that were delivered but kept as "Order Completed".
+const normalizeDeliveredOrdersStatus = async (query = {}) => {
+    await Order.updateMany(
+        {
+            ...query,
+            status: 'Order Completed',
+            deliveredAt: { $ne: null }
+        },
+        {
+            $set: { status: 'Delivered' }
+        }
+    );
+};
+
 // @desc    Get dashboard statistics for a tailor
 // @route   GET /api/orders/dashboard-stats/:tailorId
 // @access  Private (should add auth middleware)
@@ -73,6 +87,8 @@ router.get('/recent/:tailorId', async (req, res) => {
         const { tailorId } = req.params;
         const limit = parseInt(req.query.limit) || 5;
 
+        await normalizeDeliveredOrdersStatus({ tailorId });
+
         const orders = await Order.find({ tailorId })
             .sort({ createdAt: -1 })
             .limit(limit)
@@ -91,6 +107,8 @@ router.get('/recent/:tailorId', async (req, res) => {
 router.get('/my-orders/:customerId', async (req, res) => {
     try {
         const { customerId } = req.params;
+        await normalizeDeliveredOrdersStatus();
+
         // Search by customerId OR customerEmail (fallback)
         const orders = await Order.find({
             $or: [
@@ -115,6 +133,8 @@ router.get('/:tailorId', async (req, res) => {
     try {
         const { tailorId } = req.params;
         const { status, page = 1, limit = 10, customerPhone, excludeStatus } = req.query;
+
+        await normalizeDeliveredOrdersStatus({ tailorId });
 
         const query = { tailorId };
         if (status) {
@@ -159,10 +179,15 @@ router.get('/details/:orderId', async (req, res) => {
             return res.status(400).json({ message: 'Invalid order ID format' });
         }
 
-        const order = await Order.findById(orderId);
+        let order = await Order.findById(orderId);
 
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
+        }
+
+        if (order.status === 'Order Completed' && order.deliveredAt) {
+            order.status = 'Delivered';
+            order = await order.save();
         }
 
         res.json({ order });
@@ -354,7 +379,19 @@ router.post('/', async (req, res) => {
 router.put('/:orderId/status', async (req, res) => {
     try {
         const { orderId } = req.params;
-        const { status, paymentMode, finalPaymentAmount } = req.body;
+        const {
+            status,
+            paymentMode,
+            finalPaymentAmount,
+            // New payment flow fields
+            paymentStatus,
+            discountAmount,
+            currentPaymentAmount,
+            remainingAmount,
+            payLaterEnabled,
+            payLaterAmount,
+            payLaterDate
+        } = req.body;
 
         // Get current order
         const order = await Order.findById(orderId);
@@ -368,12 +405,13 @@ router.put('/:orderId/status', async (req, res) => {
             'Draft': ['Order Created', 'Cancelled'],
             'Order Created': ['Cutting Completed', 'Cancelled'],
             'Cutting Completed': ['Order Completed', 'Order Created', 'Cancelled'],
-            'Order Completed': ['Delivered', 'Cutting Completed', 'Cancelled'],
+            'Order Completed': ['Payment Completed', 'Cutting Completed', 'Cancelled'],
+            'Payment Completed': ['Delivered', 'Payment Completed'],
             // Legacy statuses for backward compatibility
             'Pending': ['In Progress', 'Cancelled'],
             'In Progress': ['Completed', 'Pending', 'Cancelled'],
             'Completed': ['Delivered', 'In Progress'],
-            'Delivered': ['Order Completed'],
+            'Delivered': ['Payment Completed', 'Delivered'],
             'Cancelled': ['Order Created']
         };
 
@@ -393,14 +431,70 @@ router.put('/:orderId/status', async (req, res) => {
             updateData.cuttingCompletedAt = new Date();
         } else if (status === 'Order Completed') {
             updateData.completedAt = new Date();
+        } else if (status === 'Payment Completed') {
+            // New payment step
+            updateData.paymentCompletedAt = new Date();
+
+            // Update payment fields
+            if (paymentStatus) updateData.paymentStatus = paymentStatus;
+            if (discountAmount !== undefined) {
+                updateData.discountAmount = discountAmount;
+                updateData.discount = discountAmount; // Keep legacy field in sync
+            }
+            if (currentPaymentAmount !== undefined) {
+                const existingPaid = Number(order.currentPaymentAmount || 0);
+                const incomingPaid = Number(currentPaymentAmount || 0);
+                updateData.currentPaymentAmount = existingPaid + incomingPaid;
+            }
+            if (remainingAmount !== undefined) {
+                const safeRemaining = Math.max(0, Number(remainingAmount));
+                updateData.remainingAmount = safeRemaining;
+                updateData.isPaid = safeRemaining === 0;
+                if (!paymentStatus) {
+                    updateData.paymentStatus = safeRemaining === 0 ? 'paid' : 'partial';
+                }
+            }
+            if (paymentMode) updateData.paymentMode = paymentMode;
+
+            // Pay later fields
+            if (payLaterEnabled !== undefined) updateData.payLaterEnabled = payLaterEnabled;
+            if (payLaterAmount !== undefined) updateData.payLaterAmount = payLaterAmount;
+            if (payLaterDate) updateData.payLaterDate = payLaterDate;
+
+            // Mark as paid if no remaining amount
+            if (remainingAmount === 0) {
+                updateData.isPaid = true;
+            }
         } else if (status === 'Delivered') {
-            updateData.deliveredAt = new Date();
-            // If payment details provided, save them
+            updateData.deliveredAt = order.deliveredAt || new Date();
+            // If payment details provided, save them (backward compatibility)
             if (paymentMode) updateData.paymentMode = paymentMode;
             if (finalPaymentAmount !== undefined) updateData.finalPaymentAmount = finalPaymentAmount;
-            if (req.body.discount !== undefined) updateData.discount = req.body.discount;
-            // Mark as paid if delivered (assuming COD or Pre-paid confirmed at delivery)
-            updateData.isPaid = true;
+            if (req.body.discount !== undefined) {
+                updateData.discount = req.body.discount;
+                updateData.discountAmount = req.body.discount;
+            }
+            // Support post-delivery payment collection updates.
+            if (paymentStatus) updateData.paymentStatus = paymentStatus;
+            if (currentPaymentAmount !== undefined) {
+                const existingPaid = Number(order.currentPaymentAmount || 0);
+                const incomingPaid = Number(currentPaymentAmount || 0);
+                updateData.currentPaymentAmount = existingPaid + incomingPaid;
+            }
+            if (remainingAmount !== undefined) {
+                const safeRemaining = Math.max(0, Number(remainingAmount));
+                updateData.remainingAmount = safeRemaining;
+                updateData.isPaid = safeRemaining === 0;
+                if (!paymentStatus) {
+                    updateData.paymentStatus = safeRemaining === 0 ? 'paid' : 'partial';
+                }
+            } else {
+                const existingRemaining = Number(order.remainingAmount || 0);
+                updateData.isPaid = existingRemaining === 0;
+            }
+            if (payLaterEnabled !== undefined) updateData.payLaterEnabled = payLaterEnabled;
+            if (payLaterAmount !== undefined) updateData.payLaterAmount = payLaterAmount;
+            if (payLaterDate) updateData.payLaterDate = payLaterDate;
         }
 
         const updatedOrder = await Order.findByIdAndUpdate(
@@ -409,28 +503,31 @@ router.put('/:orderId/status', async (req, res) => {
             { new: true, runValidators: true }
         );
 
-        // Update Invoice if it exists with discount and new totals
-        if (status === 'Delivered') {
+        // Update Invoice if it exists
+        if (status === 'Payment Completed' || status === 'Delivered') {
             try {
-                const discount = Number(updatedOrder.discount || 0);
-                const totalAmount = Number(updatedOrder.price); // Subtotal
+                const discount = Number(updatedOrder.discountAmount || updatedOrder.discount || 0);
+                const totalAmount = Number(updatedOrder.price);
                 const advance = Number(updatedOrder.advancePayment || 0);
                 const due = Math.max(0, totalAmount - advance - discount);
+
+                const invoiceStatus = updatedOrder.remainingAmount === 0 ? 'Paid' :
+                    updatedOrder.payLaterEnabled ? 'Pending' : 'Partial';
 
                 await Invoice.findOneAndUpdate(
                     { orderId: updatedOrder._id },
                     {
                         discount: discount,
                         dueAmount: due,
-                        paymentStatus: 'Paid'
+                        paymentStatus: invoiceStatus
                     }
                 );
             } catch (invErr) {
-                console.error('Error updating invoice with discount:', invErr);
+                console.error('Error updating invoice:', invErr);
             }
         }
 
-        // Generate Invoice Image Link if Delivered (no text invoice)
+        // Generate Invoice Image Link if Delivered
         let whatsappMessage = '';
         let invoiceImageLink = '';
         if (status === 'Delivered') {

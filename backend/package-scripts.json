@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "seed-demo": "node seedData/seedDemoTailors.js",
+    "add-images": "node seedData/addShopImages.js",
+    "seed-all": "node seedData/seedDemoTailors.js && node seedData/addShopImages.js"
+  }
+}

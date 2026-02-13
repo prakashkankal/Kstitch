@@ -27,6 +27,7 @@ const NewOrder = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const suggestionRef = useRef(null);
     const dateInputRef = useRef(null);
+    const advancePaymentRef = useRef(null);
 
     // Measurement Autofill State
     const [pastOrders, setPastOrders] = useState([]);
@@ -40,7 +41,8 @@ const NewOrder = () => {
         customerEmail: '',
         dueDate: '',
         notes: '',
-        advancePayment: ''
+        advancePayment: '',
+        paymentMode: 'Cash'
     });
 
     // Order items
@@ -107,10 +109,15 @@ const NewOrder = () => {
                     customerEmail: draft.customerEmail || '',
                     dueDate: draft.dueDate ? (() => {
                         const d = new Date(draft.dueDate);
-                        return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+                        // draft.dueDate is usually ISO string or Date object
+                        // To allow formatting, we should check if it's valid
+                        if (isNaN(d.getTime())) return '';
+                        const dateString = d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+                        return dateString !== 'Invalid Date' ? dateString : '';
                     })() : '',
                     notes: draft.notes || '',
-                    advancePayment: draft.advancePayment ? draft.advancePayment.toString() : ''
+                    advancePayment: draft.advancePayment ? draft.advancePayment.toString() : '',
+                    paymentMode: draft.paymentMode || 'Cash'
                 });
 
                 if (draft.orderItems && draft.orderItems.length > 0) {
@@ -234,7 +241,14 @@ const NewOrder = () => {
 
     const handleCustomerInfoChange = (e) => {
         const { name, value } = e.target;
-        setCustomerInfo(prev => ({ ...prev, [name]: value }));
+        setCustomerInfo(prev => {
+            const newState = { ...prev, [name]: value };
+            // Clear advance payment if Pay Later is selected
+            if (name === 'paymentMode' && value === 'Pay Later') {
+                newState.advancePayment = '';
+            }
+            return newState;
+        });
         setError('');
 
         if (name === 'customerName') {
@@ -530,6 +544,31 @@ const NewOrder = () => {
 
         const totalAmount = calculateGrandTotal();
         const advanceAmount = parseFloat(customerInfo.advancePayment) || 0;
+
+        // Validate Advance Payment based on Payment Mode
+        if (customerInfo.paymentMode !== 'Pay Later') {
+            if (!customerInfo.advancePayment || advanceAmount <= 0) {
+                // But wait, 0 might be allowed if total is 0? Generally advance implies partial.
+                // Requirement: "advancePayment must be enabled... required."
+                // "If empty and user clicks Create Order, show validation error."
+                // Usually advance payment requires *some* amount for Cash/Online to confirm.
+                // Assuming strict Required > 0 check, or just non-empty. 
+                // If the user enters 0, it satisfies "required" in HTML but logically it might be wrong for Cash/Online?
+                // Let's assume validation means "Value provided and valid".
+                if (!customerInfo.advancePayment) {
+                    setError('Advance payment is required for Cash or Online mode.');
+                    // Scroll to section
+                    if (advancePaymentRef.current) {
+                        advancePaymentRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Try to find input to focus
+                        const input = advancePaymentRef.current.querySelector('input[name="advancePayment"]');
+                        if (input) input.focus();
+                    }
+                    return;
+                }
+            }
+        }
+
         if (advanceAmount > totalAmount) {
             setError('Advance payment cannot be greater than total amount');
             return;
@@ -578,7 +617,8 @@ const NewOrder = () => {
                     return `${y}-${m}-${d}`;
                 })(),
                 notes: customerInfo.notes.trim() || undefined,
-                advancePayment: customerInfo.advancePayment ? parseFloat(customerInfo.advancePayment) : 0,
+                advancePayment: customerInfo.paymentMode === 'Pay Later' ? 0 : (parseFloat(customerInfo.advancePayment) || 0),
+                paymentMode: customerInfo.paymentMode,
                 orderItems: preparedItems
             };
 
@@ -1099,11 +1139,40 @@ const NewOrder = () => {
                         </div>
 
                         {/* Payment & Notes */}
-                        <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6 mb-6">
+                        <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-6 mb-6" ref={advancePaymentRef}>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Payment Mode <span className="text-red-500">*</span>
+                                </label>
+                                <div className="flex flex-wrap gap-3">
+                                    {['Online', 'Cash', 'Pay Later'].map((mode) => (
+                                        <label
+                                            key={mode}
+                                            className={`
+                                                relative flex items-center justify-center px-4 py-2 rounded-lg cursor-pointer border transition-all select-none
+                                                ${customerInfo.paymentMode === mode
+                                                    ? 'bg-[#6b4423] text-white border-[#6b4423] shadow-md'
+                                                    : 'bg-white text-slate-600 border-slate-300 hover:border-[#6b4423] hover:text-[#6b4423]'}
+                                            `}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="paymentMode"
+                                                value={mode}
+                                                checked={customerInfo.paymentMode === mode}
+                                                onChange={handleCustomerInfoChange}
+                                                className="sr-only"
+                                            />
+                                            <span className="font-medium">{mode}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Advance Payment (₹)
+                                        Advance Payment (₹) {customerInfo.paymentMode !== 'Pay Later' && <span className="text-red-500">*</span>}
                                     </label>
                                     <input
                                         type="number"
@@ -1112,8 +1181,10 @@ const NewOrder = () => {
                                         onChange={handleCustomerInfoChange}
                                         min="0"
                                         step="0.01"
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423]"
-                                        placeholder="Optional"
+                                        required={customerInfo.paymentMode !== 'Pay Later'}
+                                        disabled={customerInfo.paymentMode === 'Pay Later'}
+                                        className={`w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4423] disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        placeholder={customerInfo.paymentMode === 'Pay Later' ? "Not applicable" : "Required amount"}
                                         onWheel={(e) => e.target.blur()} // Prevent scroll change
                                     />
                                 </div>
@@ -1159,66 +1230,67 @@ const NewOrder = () => {
             </main>
 
             {showInvoiceModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200">
-                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs uppercase tracking-widest text-emerald-600 font-semibold">Invoice Ready</p>
-                                <h3 className="text-lg font-bold text-slate-800">Send Invoice</h3>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowInvoiceModal(false)}
-                                className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
-                                aria-label="Close"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="bg-green-600 p-6 text-center">
+                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                 </svg>
-                            </button>
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-1">
+                                Order Created!
+                            </h3>
+                            <p className="text-green-100 text-sm">Invoice generated successfully</p>
                         </div>
-                        <div className="px-5 py-4 space-y-3">
-                            {createdOrder?._id && (
-                                <p className="text-sm text-slate-700">
-                                    Order ID: <span className="font-semibold">{createdOrder._id.toString().slice(-6).toUpperCase()}</span>
-                                </p>
-                            )}
-                            {invoiceInfo && (
-                                <p className="text-sm text-slate-700">
-                                    Invoice: <span className="font-semibold">{invoiceInfo.invoiceNumber}</span>
-                                </p>
-                            )}
-                            <p className="text-sm text-slate-600">
-                                Send the text invoice directly to the customer on WhatsApp.
+
+                        <div className="p-6">
+                            <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-center">
+                                {createdOrder?._id && (
+                                    <img
+                                        src={`${API_URL}/api/orders/${createdOrder._id}/invoice-jpg`}
+                                        alt="Invoice Preview"
+                                        className="max-h-64 object-contain shadow-md rounded-lg border border-slate-200 bg-white"
+                                    />
+                                )}
+                            </div>
+
+                            <p className="text-center text-slate-600 mb-6 text-sm">
+                                Share the invoice directly with the customer on WhatsApp.
                             </p>
-                        </div>
-                        <div className="px-5 pb-5 pt-2 flex flex-col sm:flex-row gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowInvoiceModal(false)}
-                                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
-                            >
-                                Close
-                            </button>
+
                             <a
                                 href={whatsappLink || '#'}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={`flex-1 text-center px-4 py-2.5 rounded-lg font-semibold transition-colors ${whatsappLink ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-emerald-200 text-emerald-500 cursor-not-allowed'}`}
+                                className={`w-full py-3.5 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2 mb-3 ${!whatsappLink ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={(e) => {
                                     if (!whatsappLink) {
                                         e.preventDefault();
                                         return;
                                     }
-                                    // After sending invoice, return to dashboard
                                     setTimeout(() => {
                                         setShowInvoiceModal(false);
                                         navigate('/dashboard');
                                     }, 300);
                                 }}
                             >
-                                Send Invoice
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                                Share Invoice on WhatsApp
                             </a>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowInvoiceModal(false);
+                                    navigate('/dashboard');
+                                }}
+                                className="w-full py-3 text-slate-500 font-medium hover:text-slate-800 transition-colors"
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>
