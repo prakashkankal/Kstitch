@@ -1184,7 +1184,7 @@ const NewOrder = () => {
                                                             Garment Type <span className="text-red-500">*</span>
                                                         </label>
                                                         <div className="relative">
-                                                            {orderEntryMode === 'manual' || !item.isCustomType ? (
+                                                            {!item.isCustomType ? (
                                                                 <select
                                                                     value={item.selectedPresetId || ''}
                                                                     onChange={(e) => handlePresetChange(itemIndex, e.target.value)}
@@ -1196,9 +1196,7 @@ const NewOrder = () => {
                                                                             {preset.name}
                                                                         </option>
                                                                     ))}
-                                                                    {orderEntryMode !== 'manual' && (
-                                                                        <option value="custom">+ Custom Type</option>
-                                                                    )}
+                                                                    <option value="custom">+ Custom Type</option>
                                                                 </select>
                                                             ) : (
                                                                 <div className="flex gap-2">
