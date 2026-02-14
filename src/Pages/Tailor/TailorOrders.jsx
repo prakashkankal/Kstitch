@@ -12,6 +12,10 @@ const TailorOrders = () => {
     const [selectedStatus, setSelectedStatus] = useState('All');
     const [selectedDateRange, setSelectedDateRange] = useState('all');
     const [openMenuId, setOpenMenuId] = useState(null);
+    const [showReadOnlySummary, setShowReadOnlySummary] = useState(false);
+    const [readOnlySummaryLoading, setReadOnlySummaryLoading] = useState(false);
+    const [readOnlySummaryError, setReadOnlySummaryError] = useState('');
+    const [readOnlySummaryOrder, setReadOnlySummaryOrder] = useState(null);
 
     useEffect(() => {
         const userInfo = localStorage.getItem('userInfo');
@@ -205,7 +209,9 @@ const TailorOrders = () => {
 
     // Format date
     const formatDate = (dateString) => {
+        if (!dateString) return '-';
         const date = new Date(dateString);
+        if (Number.isNaN(date.getTime())) return '-';
         return date.toLocaleDateString('en-IN', {
             year: 'numeric',
             month: 'short',
@@ -283,6 +289,74 @@ const TailorOrders = () => {
         const message = buildTextInvoiceMessage(order);
         const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
+    };
+
+    const formatCurrency = (value) => {
+        const amount = Number(value || 0);
+        return `Rs. ${amount.toLocaleString('en-IN')}`;
+    };
+
+    const isCancelledOrder = (order) => order?.status === 'Cancelled' || order?.status === 'Canceled';
+
+    const shouldOpenReadOnlySummary = (order) => {
+        if (!order) return false;
+        return Boolean(order.isManualBill) || order.status === 'Delivered' || isCancelledOrder(order);
+    };
+
+    const closeReadOnlySummary = () => {
+        setShowReadOnlySummary(false);
+        setReadOnlySummaryLoading(false);
+        setReadOnlySummaryError('');
+        setReadOnlySummaryOrder(null);
+    };
+
+    const openReadOnlySummary = async (order) => {
+        try {
+            setShowReadOnlySummary(true);
+            setReadOnlySummaryLoading(true);
+            setReadOnlySummaryError('');
+            setReadOnlySummaryOrder(null);
+
+            const response = await fetch(`${API_URL}/api/orders/details/${order._id}`);
+            if (!response.ok) {
+                throw new Error('Failed to load order summary');
+            }
+
+            const data = await response.json();
+            setReadOnlySummaryOrder(data.order || order);
+        } catch (err) {
+            setReadOnlySummaryError(err.message || 'Unable to load order summary');
+        } finally {
+            setReadOnlySummaryLoading(false);
+        }
+    };
+
+    const handleOpenOrder = (order) => {
+        if (shouldOpenReadOnlySummary(order)) {
+            openReadOnlySummary(order);
+            return;
+        }
+        navigate(`/orders/${order._id}`);
+    };
+
+    const getPaymentSnapshot = (order) => {
+        const total = Number(order?.price || 0);
+        const discount = Number(order?.discountAmount ?? order?.discount ?? 0);
+        const netTotal = Math.max(0, total - discount);
+        const explicitPaid = Number(order?.advancePayment || 0) + Number(order?.currentPaymentAmount || 0);
+        const remainingFromData = order?.remainingAmount;
+        const fallbackRemaining = Math.max(0, netTotal - explicitPaid);
+        const remaining = Number(remainingFromData ?? fallbackRemaining);
+        const paid = remainingFromData !== undefined && remainingFromData !== null
+            ? Math.max(0, netTotal - remaining)
+            : Math.max(0, explicitPaid);
+
+        return { total, paid, discount, remaining };
+    };
+
+    const getMeasurementEntries = (measurements) => {
+        if (!measurements || typeof measurements !== 'object') return [];
+        return Object.entries(measurements);
     };
 
     if (!tailorData) {
@@ -456,7 +530,7 @@ const TailorOrders = () => {
                                     return (
                                         <div
                                             key={order._id}
-                                            onClick={() => navigate(`/orders/${order._id}`)}
+                                            onClick={() => handleOpenOrder(order)}
                                             className="flex items-center justify-between p-2.5 active:bg-slate-50 transition-colors cursor-pointer min-h-[66px]"
                                         >
                                             {/* Left: Customer & ID */}
@@ -526,12 +600,12 @@ const TailorOrders = () => {
                                                             </button>
                                                             <button
                                                                 onClick={() => {
-                                                                    navigate(`/orders/${order._id}`);
+                                                                    handleOpenOrder(order);
                                                                     setOpenMenuId(null);
                                                                 }}
                                                                 className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50"
                                                             >
-                                                                More Options
+                                                                {shouldOpenReadOnlySummary(order) ? 'View Summary' : 'More Options'}
                                                             </button>
                                                         </div>
                                                     )}
@@ -611,12 +685,12 @@ const TailorOrders = () => {
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
-                                                                        navigate(`/orders/${order._id}`);
+                                                                        handleOpenOrder(order);
                                                                         setOpenMenuId(null);
                                                                     }}
                                                                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-slate-50"
                                                                 >
-                                                                    More Options
+                                                                    {shouldOpenReadOnlySummary(order) ? 'View Summary' : 'More Options'}
                                                                 </button>
                                                             </div>
                                                         )}
@@ -630,6 +704,203 @@ const TailorOrders = () => {
                         </>
                     )}
                 </div>
+
+                {showReadOnlySummary && (
+                    <div className="fixed inset-0 z-[70] bg-slate-950/45 backdrop-blur-sm p-4 md:p-8">
+                        <div className="mx-auto mt-2 md:mt-8 w-full max-w-3xl rounded-3xl border border-slate-200 bg-[#fdf8f2] shadow-2xl overflow-hidden">
+                            <div className="px-5 py-4 md:px-7 md:py-5 border-b border-slate-200 bg-white/90 flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-semibold tracking-[0.22em] text-[#8a684a] uppercase">Read-Only Order View</p>
+                                    <h3 className="text-xl md:text-2xl font-bold text-slate-900 mt-1">
+                                        {readOnlySummaryOrder?.status === 'Delivered'
+                                            ? 'Delivered Order Details'
+                                            : isCancelledOrder(readOnlySummaryOrder)
+                                                ? 'Cancelled Order Details'
+                                                : 'Manual Bill Details'}
+                                    </h3>
+                                    {readOnlySummaryOrder?._id && (
+                                        <p className="text-sm text-slate-500 mt-1">#{readOnlySummaryOrder._id.slice(-6).toUpperCase()}</p>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={closeReadOnlySummary}
+                                    className="h-10 w-10 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 transition-colors"
+                                    aria-label="Close read-only order summary"
+                                >
+                                    <svg className="h-5 w-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="p-5 md:p-7 max-h-[70vh] overflow-y-auto">
+                                {readOnlySummaryLoading ? (
+                                    <div className="py-12 text-center">
+                                        <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-[#6b4423]"></div>
+                                        <p className="text-sm text-slate-600 mt-4">Loading order summary...</p>
+                                    </div>
+                                ) : readOnlySummaryError ? (
+                                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm">
+                                        {readOnlySummaryError}
+                                    </div>
+                                ) : readOnlySummaryOrder ? (
+                                    <div className="space-y-4">
+                                        {(() => {
+                                            const orderView = readOnlySummaryOrder;
+                                            const payment = getPaymentSnapshot(orderView);
+                                            const showPaymentSection = !isCancelledOrder(orderView);
+                                            const legacyMeasurements = getMeasurementEntries(orderView.measurements);
+                                            const hasOrderItems = Array.isArray(orderView.orderItems) && orderView.orderItems.length > 0;
+                                            return (
+                                                <>
+                                        <section className="rounded-2xl border border-[#ead8c4] bg-white p-4 md:p-5">
+                                            <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-[#8a684a] mb-3">Order Summary</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                                                <div>
+                                                    <p className="text-slate-500">Order Date</p>
+                                                    <p className="font-semibold text-slate-800">{formatDate(orderView.createdAt)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Order Type</p>
+                                                    <p className="font-semibold text-slate-800">{orderView.orderType || (orderView.isManualBill ? 'Manual Bill' : 'Order')}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Status</p>
+                                                    <p className="font-semibold text-slate-800">{orderView.status || 'Order Created'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Due Date</p>
+                                                    <p className="font-semibold text-slate-800">{formatDate(orderView.dueDate)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Completed/Delivered</p>
+                                                    <p className="font-semibold text-slate-800">{formatDate(orderView.deliveredAt || orderView.completedAt)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Order Code</p>
+                                                    <p className="font-semibold text-slate-800">{getShortenedId(orderView._id)}</p>
+                                                </div>
+                                            </div>
+                                            {orderView.notes && (
+                                                <div className="mt-3 pt-3 border-t border-slate-100">
+                                                    <p className="text-slate-500 text-sm mb-1">Notes</p>
+                                                    <p className="text-sm text-slate-800">{orderView.notes}</p>
+                                                </div>
+                                            )}
+                                        </section>
+
+                                        <section className="rounded-2xl border border-[#ead8c4] bg-white p-4 md:p-5">
+                                            <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-[#8a684a] mb-3">Customer Detail</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                                <div>
+                                                    <p className="text-slate-500">Name</p>
+                                                    <p className="font-semibold text-slate-800">{orderView.customerName || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Phone</p>
+                                                    <p className="font-semibold text-slate-800">{orderView.customerPhone || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-slate-500">Email</p>
+                                                    <p className="font-semibold text-slate-800">{orderView.customerEmail || '-'}</p>
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        <section className="rounded-2xl border border-[#ead8c4] bg-white p-4 md:p-5">
+                                            <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-[#8a684a] mb-3">Measurement Detail (At Order Creation)</h4>
+                                            {hasOrderItems ? (
+                                                <div className="space-y-3">
+                                                    {orderView.orderItems.map((item, idx) => {
+                                                        const itemMeasurements = getMeasurementEntries(item.measurements);
+                                                        const itemExtra = getMeasurementEntries(item.extraMeasurements);
+                                                        return (
+                                                            <div key={item._id || `${item.garmentType || 'item'}-${idx}`} className="rounded-xl border border-slate-200 p-3">
+                                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                                                    <p className="text-sm font-semibold text-slate-800">{item.garmentType || `Item ${idx + 1}`}</p>
+                                                                    <p className="text-xs text-slate-500">Qty: {item.quantity || 1}</p>
+                                                                </div>
+                                                                {itemMeasurements.length === 0 && itemExtra.length === 0 ? (
+                                                                    <p className="text-xs text-slate-500">No measurements recorded</p>
+                                                                ) : (
+                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                                        {itemMeasurements.map(([key, value]) => (
+                                                                            <div key={`${idx}-m-${key}`} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                                                                                <p className="text-[11px] text-slate-500">{key}</p>
+                                                                                <p className="text-sm font-semibold text-slate-800">{String(value)}</p>
+                                                                            </div>
+                                                                        ))}
+                                                                        {itemExtra.map(([key, value]) => (
+                                                                            <div key={`${idx}-x-${key}`} className="rounded-lg bg-amber-50 px-2 py-1.5">
+                                                                                <p className="text-[11px] text-amber-700">{key}</p>
+                                                                                <p className="text-sm font-semibold text-slate-800">{String(value)}</p>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : legacyMeasurements.length > 0 ? (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                    {legacyMeasurements.map(([key, value]) => (
+                                                        <div key={key} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                                                            <p className="text-[11px] text-slate-500">{key}</p>
+                                                            <p className="text-sm font-semibold text-slate-800">{String(value)}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-slate-500">No measurements recorded at order creation.</p>
+                                            )}
+                                        </section>
+
+                                        {showPaymentSection && (
+                                            <section className="rounded-2xl border border-[#ead8c4] bg-white p-4 md:p-5">
+                                                <h4 className="text-sm font-bold uppercase tracking-[0.16em] text-[#8a684a] mb-3">Payment Detail</h4>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                    <div>
+                                                        <p className="text-slate-500">Total</p>
+                                                        <p className="font-semibold text-slate-900">{formatCurrency(payment.total)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500">Paid</p>
+                                                        <p className="font-semibold text-emerald-700">{formatCurrency(payment.paid)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500">Discount</p>
+                                                        <p className="font-semibold text-blue-700">{formatCurrency(payment.discount)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-slate-500">Balance</p>
+                                                        <p className="font-semibold text-red-700">{formatCurrency(payment.remaining)}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                                                    <p className="text-slate-600">
+                                                        Payment Status: <span className="font-semibold text-slate-800">{orderView.paymentStatus || 'unpaid'}</span>
+                                                    </p>
+                                                    <p className="text-slate-600">
+                                                        Payment Mode: <span className="font-semibold text-slate-800">{orderView.paymentMode || '-'}</span>
+                                                    </p>
+                                                    {orderView.payLaterDate && (
+                                                        <p className="text-slate-600">
+                                                            Due: <span className="font-semibold text-slate-800">{formatDate(orderView.payLaterDate)}</span>
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </section>
+                                        )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Mobile Bottom Spacer */}
                 <div className="h-24 md:hidden"></div>
