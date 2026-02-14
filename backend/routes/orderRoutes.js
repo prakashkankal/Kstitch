@@ -300,6 +300,7 @@ router.post('/', async (req, res) => {
 
         // Determine if this is a multi-item or legacy single-item order
         const isMultiItem = orderItems && orderItems.length > 0;
+        const isManual = Boolean(isManualBill);
 
         let orderData = {
             tailorId,
@@ -318,11 +319,13 @@ router.post('/', async (req, res) => {
             currentPaymentAmount: Number(currentPaymentAmount || 0),
             remainingAmount: remainingAmount !== undefined
                 ? Math.max(0, Number(remainingAmount))
-                : Math.max(0, Number((isMultiItem ? orderItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0) : price) || 0) - Number(advancePayment || 0) - Number(discountAmount || 0)),
-            payLaterEnabled: Boolean(payLaterEnabled),
+                : (isManual
+                    ? Math.max(0, Number((isMultiItem ? orderItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0) : price) || 0) - Number(advancePayment || 0) - Number(discountAmount || 0))
+                    : 0),
+            payLaterEnabled: isManual ? Boolean(payLaterEnabled) : false,
             payLaterAmount: Number(payLaterAmount || 0),
             payLaterDate: payLaterDate || undefined,
-            isManualBill: Boolean(isManualBill)
+            isManualBill: isManual
         };
 
         if (isMultiItem) {
